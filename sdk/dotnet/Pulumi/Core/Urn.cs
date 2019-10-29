@@ -36,7 +36,7 @@ namespace Pulumi
             }
             else
             {
-                parentPrefix = Output.Create($"urn:pulumi:{stack ?? Deployment.Instance.StackName}::{project ?? Deployment.Instance.ProjectName}::");
+                parentPrefix = Output.Format($"urn:pulumi:{stack ?? Deployment.Instance.StackName}::{project ?? Deployment.Instance.ProjectName}::");
             }
 
             return Output.Format($"{parentPrefix}{type}::{name}");

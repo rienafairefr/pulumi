@@ -13,9 +13,9 @@ import (
 var dirs = []string{
 	"rename",
 	"adopt_into_component",
-	"rename_component_and_child",
-	"retype_component",
-	"rename_component",
+	//	"rename_component_and_child",
+	//	"retype_component",
+	//	"rename_component",
 }
 
 // TestNodejsAliases tests a case where a resource's name changes but it provides an `alias`
@@ -49,6 +49,25 @@ func TestPythonAliases(t *testing.T) {
 				Dependencies: []string{
 					filepath.Join("..", "..", "..", "sdk", "python", "env", "src"),
 				},
+				Quick: true,
+				EditDirs: []integration.EditDir{
+					{
+						Dir:             path.Join(d, "step2"),
+						Additive:        true,
+						ExpectNoChanges: true,
+					},
+				},
+			})
+		})
+	}
+}
+
+func TestDotNetAliases(t *testing.T) {
+	for _, dir := range dirs {
+		d := path.Join("dotnet", dir)
+		t.Run(d, func(t *testing.T) {
+			integration.ProgramTest(t, &integration.ProgramTestOptions{
+				Dir:   path.Join(d, "step1"),
 				Quick: true,
 				EditDirs: []integration.EditDir{
 					{
