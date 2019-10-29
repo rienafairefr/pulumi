@@ -4372,28 +4372,33 @@ func TestDestroyTarget(t *testing.T) {
 		// limit to up to 3 resources to destroy.  This keeps the test running time under
 		// control as it only generates a few hundred combinations instead of several thousand.
 		if len(subset) <= 3 {
-			destroySpecificTargets(t, subset, true /*forceTargets*/, func(urns []resource.URN, deleted map[resource.URN]bool) {})
+			destroySpecificTargets(t, subset, true, /*targetDependents*/
+				func(urns []resource.URN, deleted map[resource.URN]bool) {})
 		}
 	}
 
-	destroySpecificTargets(t, []string{"A"}, true /*forceTargets*/, func(urns []resource.URN, deleted map[resource.URN]bool) {
-		// when deleting 'A' we expect A, B, C, E, F, and K to be deleted
-		names := complexTestDependencyGraphNames
-		assert.Equal(t, map[resource.URN]bool{
-			pickURN(t, urns, names, "A"): true,
-			pickURN(t, urns, names, "B"): true,
-			pickURN(t, urns, names, "C"): true,
-			pickURN(t, urns, names, "E"): true,
-			pickURN(t, urns, names, "F"): true,
-			pickURN(t, urns, names, "K"): true,
-		}, deleted)
-	})
+	destroySpecificTargets(
+		t, []string{"A"}, true, /*targetDependents*/
+		func(urns []resource.URN, deleted map[resource.URN]bool) {
+			// when deleting 'A' we expect A, B, C, E, F, and K to be deleted
+			names := complexTestDependencyGraphNames
+			assert.Equal(t, map[resource.URN]bool{
+				pickURN(t, urns, names, "A"): true,
+				pickURN(t, urns, names, "B"): true,
+				pickURN(t, urns, names, "C"): true,
+				pickURN(t, urns, names, "E"): true,
+				pickURN(t, urns, names, "F"): true,
+				pickURN(t, urns, names, "K"): true,
+			}, deleted)
+		})
 
-	destroySpecificTargets(t, []string{"A"}, false /*forceTargets*/, func(urns []resource.URN, deleted map[resource.URN]bool) {})
+	destroySpecificTargets(
+		t, []string{"A"}, false, /*targetDependents*/
+		func(urns []resource.URN, deleted map[resource.URN]bool) {})
 }
 
 func destroySpecificTargets(
-	t *testing.T, targets []string, forceTargets bool,
+	t *testing.T, targets []string, targetDependents bool,
 	validate func(urns []resource.URN, deleted map[resource.URN]bool)) {
 
 	//             A
@@ -4434,7 +4439,7 @@ func destroySpecificTargets(
 	}
 
 	p.Options.host = deploytest.NewPluginHost(nil, nil, program, loaders...)
-	p.Options.ForceTargets = forceTargets
+	p.Options.TargetDependents = targetDependents
 
 	destroyTargets := []resource.URN{}
 	for _, target := range targets {
@@ -4446,7 +4451,7 @@ func destroySpecificTargets(
 
 	p.Steps = []TestStep{{
 		Op:            Destroy,
-		ExpectFailure: !forceTargets,
+		ExpectFailure: !targetDependents,
 		Validate: func(project workspace.Project, target deploy.Target, j *Journal,
 			evts []Event, res result.Result) result.Result {
 
@@ -4613,11 +4618,11 @@ func updateInvalidTarget(t *testing.T) {
 }
 
 func TestCreateDuringUpdateTarget(t *testing.T) {
-	testCreateDuringUpdateTarget(t, true /*forceTargets*/)
-	testCreateDuringUpdateTarget(t, false /* forceTargets*/)
+	testCreateDuringUpdateTarget(t, true /*targetDependents*/)
+	testCreateDuringUpdateTarget(t, false /* targetDependents*/)
 }
 
-func testCreateDuringUpdateTarget(t *testing.T, forceTargets bool) {
+func testCreateDuringUpdateTarget(t *testing.T, targetDependents bool) {
 	loaders := []*deploytest.ProviderLoader{
 		deploytest.NewProviderLoader("pkgA", semver.MustParse("1.0.0"), func() (plugin.Provider, error) {
 			return &deploytest.Provider{}, nil
@@ -4652,13 +4657,13 @@ func testCreateDuringUpdateTarget(t *testing.T, forceTargets bool) {
 	host2 := deploytest.NewPluginHost(nil, nil, program2, loaders...)
 
 	p.Options.host = host2
-	p.Options.ForceTargets = forceTargets
+	p.Options.TargetDependents = targetDependents
 	p.Options.UpdateTargets = []resource.URN{
 		p.NewURN("pkgA:m:typA", "resA", ""),
 	}
 	p.Steps = []TestStep{{
 		Op:            Update,
-		ExpectFailure: !forceTargets,
+		ExpectFailure: !targetDependents,
 	}}
 	p.Run(t, nil)
 }

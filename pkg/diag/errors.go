@@ -74,10 +74,10 @@ func GetCannotDeleteParentResourceWithoutAlsoDeletingChildError(urn resource.URN
 
 func GetResourceWillBeCreatedButWasNotSpecifiedInTargetList(urn resource.URN) *Diag {
 	return newError(urn, 2013, `Resource '%v' will be created but was not specified in --target list.
-Either include resource in --target list or pass --force-targets to proceed.`)
+Either include resource in --target list or pass --target-dependents to proceed.`)
 }
 
 func GetResourceWillBeDestroyedButWasNotSpecifiedInTargetList(urn resource.URN) *Diag {
 	return newError(urn, 2014, `Resource '%v' will be destroyed but was not specified in --target list.
-Either include resource in --target list or pass --force-targets to proceed.`)
+Either include resource in --target list or pass --target-dependents to proceed.`)
 }

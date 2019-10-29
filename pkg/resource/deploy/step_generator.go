@@ -379,7 +379,7 @@ func (sg *stepGenerator) GenerateSteps(
 		return []Step{NewSameStep(sg.plan, event, old, new)}, nil
 	}
 
-	if updateTargetsOpt != nil && !updateTargetsOpt[urn] && !sg.opts.ForceTargets {
+	if updateTargetsOpt != nil && !updateTargetsOpt[urn] && !sg.opts.TargetDependents {
 		d := diag.GetResourceWillBeCreatedButWasNotSpecifiedInTargetList(urn)
 
 		// Targets were specified, but didn't include this resource to create.  Give a particular
@@ -626,7 +626,7 @@ func (sg *stepGenerator) GenerateDeletes(targetsOpt map[resource.URN]bool) ([]St
 	deletingUnspecifiedTarget := false
 	for _, step := range dels {
 		urn := step.URN()
-		if targetsOpt != nil && !targetsOpt[urn] && !sg.opts.ForceTargets {
+		if targetsOpt != nil && !targetsOpt[urn] && !sg.opts.TargetDependents {
 			d := diag.GetResourceWillBeDestroyedButWasNotSpecifiedInTargetList(urn)
 
 			// Targets were specified, but didn't include this resource to create.  Error in that

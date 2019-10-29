@@ -16,8 +16,8 @@ CHANGELOG
 - `pulumi update --target` and `pulumi destroy --target` will both error if they determine a
   dependent resource needs to be updated, destroyed, or created that was not was specified in the
   `--target` list.  To proceed with an `update/destroy` after this error, either specify all the
-  reported resources as `--target`s, or pass the `--force-targets` flag to allow necessary changes
-  to unspecified targets.
+  reported resources as `--target`s, or pass the `--target-dependents` flag to allow necessary
+  changes to unspecified dependent targets.
 
 ## 1.4.0 (2019-10-24)
 
