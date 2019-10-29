@@ -4444,6 +4444,8 @@ func destroySpecificTargets(
 	p.Options.DestroyTargets = destroyTargets
 	t.Logf("Destroying targets: %v", destroyTargets)
 
+	// If we're not forcing the targets to be destroyed, then expect to get a failure here as
+	// we'll have downstream resources to delete that weren't specified explicitly.
 	p.Steps = []TestStep{{
 		Op:            Destroy,
 		ExpectFailure: !forceTargets,
