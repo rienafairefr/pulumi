@@ -67,6 +67,7 @@ func newUpCmd() *cobra.Command {
 	var yes bool
 	var secretsProvider string
 	var targets *[]string
+	var forceTargets bool
 
 	// up implementation used when the source of the Pulumi program is in the current working directory.
 	upWorkingDirectory := func(opts backend.UpdateOptions) result.Result {
@@ -112,6 +113,7 @@ func newUpCmd() *cobra.Command {
 			Refresh:              refresh,
 			UseLegacyDiff:        useLegacyDiff(),
 			UpdateTargets:        targetUrns,
+			ForceTargets:         forceTargets,
 		}
 
 		changes, res := s.Update(commandContext(), backend.UpdateOperation{
@@ -379,6 +381,9 @@ func newUpCmd() *cobra.Command {
 		"target", "t", []string{},
 		"Specify a single resource URN to update. Other resources will not be updated."+
 			" Multiple resources can be specified using: --target urn1 --target urn2")
+	cmd.PersistentFlags().BoolVar(
+		&forceTargets, "force-targets", false,
+		"Allows updating of dependent targets discovered but not specified in --target list")
 
 	// Flags for engine.UpdateOptions.
 	if hasDebugCommands() {

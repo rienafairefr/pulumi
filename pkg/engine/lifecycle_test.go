@@ -4364,7 +4364,7 @@ func TestImportUpdatedID(t *testing.T) {
 	}
 }
 
-func TestDeleteTarget(t *testing.T) {
+func TestDestroyTarget(t *testing.T) {
 	// Try refreshing a stack with combinations of the above resources as target to destroy.
 	subsets := combinations.All(complexTestDependencyGraphNames)
 
@@ -4372,11 +4372,11 @@ func TestDeleteTarget(t *testing.T) {
 		// limit to up to 3 resources to destroy.  This keeps the test running time under
 		// control as it only generates a few hundred combinations instead of several thousand.
 		if len(subset) <= 3 {
-			deleteSpecificTargets(t, subset, func(urns []resource.URN, deleted map[resource.URN]bool) {})
+			destroySpecificTargets(t, subset, true /*forceTargets*/, func(urns []resource.URN, deleted map[resource.URN]bool) {})
 		}
 	}
 
-	deleteSpecificTargets(t, []string{"A"}, func(urns []resource.URN, deleted map[resource.URN]bool) {
+	destroySpecificTargets(t, []string{"A"}, true /*forceTargets*/, func(urns []resource.URN, deleted map[resource.URN]bool) {
 		// when deleting 'A' we expect A, B, C, E, F, and K to be deleted
 		names := complexTestDependencyGraphNames
 		assert.Equal(t, map[resource.URN]bool{
@@ -4388,10 +4388,12 @@ func TestDeleteTarget(t *testing.T) {
 			pickURN(t, urns, names, "K"): true,
 		}, deleted)
 	})
+
+	destroySpecificTargets(t, []string{"A"}, false /*forceTargets*/, func(urns []resource.URN, deleted map[resource.URN]bool) {})
 }
 
-func deleteSpecificTargets(
-	t *testing.T, targets []string,
+func destroySpecificTargets(
+	t *testing.T, targets []string, forceTargets bool,
 	validate func(urns []resource.URN, deleted map[resource.URN]bool)) {
 
 	//             A
@@ -4432,6 +4434,7 @@ func deleteSpecificTargets(
 	}
 
 	p.Options.host = deploytest.NewPluginHost(nil, nil, program, loaders...)
+	p.Options.ForceTargets = forceTargets
 
 	destroyTargets := []resource.URN{}
 	for _, target := range targets {
@@ -4443,7 +4446,7 @@ func deleteSpecificTargets(
 
 	p.Steps = []TestStep{{
 		Op:            Destroy,
-		ExpectFailure: false,
+		ExpectFailure: !forceTargets,
 		Validate: func(project workspace.Project, target deploy.Target, j *Journal,
 			evts []Event, res result.Result) result.Result {
 
@@ -4479,6 +4482,8 @@ func TestUpdateTarget(t *testing.T) {
 			updateSpecificTargets(t, subset)
 		}
 	}
+
+	updateSpecificTargets(t, []string{"A"})
 
 	// Also update a target that doesn't exist to make sure we don't crash or otherwise go off the rails.
 	updateInvalidTarget(t)
@@ -4563,7 +4568,6 @@ func updateSpecificTargets(t *testing.T, targets []string) {
 			return res
 		},
 	}}
-
 	p.Run(t, old)
 }
 
@@ -4606,6 +4610,57 @@ func updateInvalidTarget(t *testing.T) {
 	}}
 
 	p.Run(t, old)
+}
+
+func TestCreateDuringUpdateTarget(t *testing.T) {
+	testCreateDuringUpdateTarget(t, true /*forceTargets*/)
+	testCreateDuringUpdateTarget(t, false /* forceTargets*/)
+}
+
+func testCreateDuringUpdateTarget(t *testing.T, forceTargets bool) {
+	loaders := []*deploytest.ProviderLoader{
+		deploytest.NewProviderLoader("pkgA", semver.MustParse("1.0.0"), func() (plugin.Provider, error) {
+			return &deploytest.Provider{}, nil
+		}),
+	}
+
+	program1 := deploytest.NewLanguageRuntime(func(_ plugin.RunInfo, monitor *deploytest.ResourceMonitor) error {
+		_, _, _, err := monitor.RegisterResource("pkgA:m:typA", "resA", true)
+		assert.NoError(t, err)
+		return nil
+	})
+	host1 := deploytest.NewPluginHost(nil, nil, program1, loaders...)
+
+	p := &TestPlan{
+		Options: UpdateOptions{host: host1},
+	}
+
+	p.Steps = []TestStep{{Op: Update}}
+	p.Run(t, nil)
+
+	// Now, force update only resA. But also have a new resource resB get created. If we're not
+	// forcing the update this this should fail, otherwise, this should succeed.
+	program2 := deploytest.NewLanguageRuntime(func(_ plugin.RunInfo, monitor *deploytest.ResourceMonitor) error {
+		_, _, _, err := monitor.RegisterResource("pkgA:m:typA", "resA", true)
+		assert.NoError(t, err)
+
+		_, _, _, err = monitor.RegisterResource("pkgA:m:typA", "resB", true)
+		assert.NoError(t, err)
+
+		return nil
+	})
+	host2 := deploytest.NewPluginHost(nil, nil, program2, loaders...)
+
+	p.Options.host = host2
+	p.Options.ForceTargets = forceTargets
+	p.Options.UpdateTargets = []resource.URN{
+		p.NewURN("pkgA:m:typA", "resA", ""),
+	}
+	p.Steps = []TestStep{{
+		Op:            Update,
+		ExpectFailure: !forceTargets,
+	}}
+	p.Run(t, nil)
 }
 
 func TestDependencyChangeDBR(t *testing.T) {

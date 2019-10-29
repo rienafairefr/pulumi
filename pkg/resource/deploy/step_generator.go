@@ -379,21 +379,13 @@ func (sg *stepGenerator) GenerateSteps(
 		return []Step{NewSameStep(sg.plan, event, old, new)}, nil
 	}
 
-	if updateTargetsOpt != nil && !updateTargetsOpt[urn] {
-		d := diag.GetResourceIsBeingCreatedButWasNotSpecifiedInTargetList(urn)
+	if updateTargetsOpt != nil && !updateTargetsOpt[urn] && !sg.opts.ForceTargets {
+		d := diag.GetResourceWillBeCreatedButWasNotSpecifiedInTargetList(urn)
 
-		if sg.plan.preview {
-			// During preview we only warn here but let the planning proceed.  This allows the user
-			// to hear about *all* the potential resources they'd need to add a -target arg for.
-			// This prevents the annoying scenario where you get notified about a problem, fix it,
-			// rerun and then get notified about the very next problem.
-			sg.plan.Diag().Warningf(d, urn)
-		} else {
-			// Targets were specified, but didn't include this resource to create.  Give a particular
-			// error in that case and stop immediately.
-			sg.plan.Diag().Errorf(d, urn)
-			return nil, result.Bail()
-		}
+		// Targets were specified, but didn't include this resource to create.  Give a particular
+		// error in that case and stop immediately.
+		sg.plan.Diag().Errorf(d, urn)
+		return nil, result.Bail()
 	}
 
 	// Case 4: Not Case 1, 2, or 3
@@ -629,6 +621,24 @@ func (sg *stepGenerator) GenerateDeletes(targetsOpt map[resource.URN]bool) ([]St
 		}
 
 		dels = filtered
+	}
+
+	deletingUnspecifiedTarget := false
+	for _, step := range dels {
+		urn := step.URN()
+		if targetsOpt != nil && !targetsOpt[urn] && !sg.opts.ForceTargets {
+			d := diag.GetResourceWillBeDestroyedButWasNotSpecifiedInTargetList(urn)
+
+			// Targets were specified, but didn't include this resource to create.  Error in that
+			// case and stop immediately.  Report all the problematic targets so the user doesn't
+			// have to keep adding them one at a time and re-running the operation.
+			sg.plan.Diag().Errorf(d, urn)
+			deletingUnspecifiedTarget = true
+		}
+	}
+
+	if deletingUnspecifiedTarget {
+		return nil, result.Bail()
 	}
 
 	return dels, nil

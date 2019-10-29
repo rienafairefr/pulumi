@@ -54,6 +54,7 @@ type Options struct {
 	RefreshTargets    []resource.URN // The specific resources to refresh during a refresh op.
 	DestroyTargets    []resource.URN // Specific resources to destroy.
 	UpdateTargets     []resource.URN // Specific resources to update.
+	ForceTargets      bool           // true if we're forcing things to proceed, even with unspecified targets
 	TrustDependencies bool           // whether or not to trust the resource dependency graph.
 	UseLegacyDiff     bool           // whether or not to use legacy diffing behavior.
 }
