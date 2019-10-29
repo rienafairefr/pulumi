@@ -13,6 +13,12 @@ CHANGELOG
   imported by passing the `--force` flag.
   [#3422](https://github.com/pulumi/pulumi/pull/3422)
 
+- `pulumi update --target` and `pulumi destroy --target` will both error if they determine a
+  dependent resource needs to be updated, destroyed, or created that was not was specified in the
+  `--target` list.  To proceed with an `update/destroy` after this error, either specify all the
+  reported resources as `--target`s, or pass the `--force-targets` flag to allow necessary changes
+  to unspecified targets.
+
 ## 1.4.0 (2019-10-24)
 
 - `FileAsset` in the Python SDK now accepts anything implementing `os.PathLike` in addition to `str`.
