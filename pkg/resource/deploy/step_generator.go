@@ -129,13 +129,6 @@ func (sg *stepGenerator) GenerateReadSteps(event ReadResourceEvent) ([]Step, res
 //
 // If the given resource is a custom resource, the step generator will invoke Diff and Check on the
 // provider associated with that resource. If those fail, an error is returned.
-//
-// The bool result value indicates if generating steps reported an error and the planExecutor should
-// continue generating the full plan, but should bail out at the end.  This is useful for the case
-// where a problem is encountered, but we want to keep reporting issues to the user instead of
-// forcing them to repetitively fix/rerun their app to get through it.  This result should only be
-// returned during preview as it is safe to continue then as opposed to during a normal update where
-// this could lead to actual changes to the user stack that may not be wanted.
 func (sg *stepGenerator) GenerateSteps(
 	updateTargetsOpt map[resource.URN]bool, event RegisterResourceEvent) ([]Step, result.Result) {
 
