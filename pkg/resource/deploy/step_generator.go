@@ -403,8 +403,7 @@ func (sg *stepGenerator) GenerateSteps(
 		if !sg.plan.preview {
 			// In preview we keep going so that the user will hear about all the problems and can then
 			// fix up their command once (as opposed to adding a target, rerunning, adding a target,
-			// rerunning, etc. etc.).  We let the caller know that they can continue, but should
-			// eventually fail with an error once the entire plan is produced.
+			// rerunning, etc. etc.).
 			//
 			// Doing a normal run.  We should not proceed here at all.  We don't want to create
 			// something the user didn't ask for.
@@ -653,15 +652,25 @@ func (sg *stepGenerator) GenerateDeletes(targetsOpt map[resource.URN]bool) ([]St
 		if targetsOpt != nil && !targetsOpt[urn] && !sg.opts.TargetDependents {
 			d := diag.GetResourceWillBeDestroyedButWasNotSpecifiedInTargetList(urn)
 
-			// Targets were specified, but didn't include this resource to create.  Error in that
-			// case and stop immediately.  Report all the problematic targets so the user doesn't
-			// have to keep adding them one at a time and re-running the operation.
+			// Targets were specified, but didn't include this resource to create.  Report all the
+			// problematic targets so the user doesn't have to keep adding them one at a time and
+			// re-running the operation.
+			//
+			// Mark that step generation entered an error state so that the entire app run fails.
 			sg.plan.Diag().Errorf(d, urn)
+			sg.sawError = true
+
 			deletingUnspecifiedTarget = true
 		}
 	}
 
-	if deletingUnspecifiedTarget {
+	if deletingUnspecifiedTarget && !sg.plan.preview {
+		// In preview we keep going so that the user will hear about all the problems and can then
+		// fix up their command once (as opposed to adding a target, rerunning, adding a target,
+		// rerunning, etc. etc.).
+		//
+		// Doing a normal run.  We should not proceed here at all.  We don't want to delete
+		// something the user didn't ask for.
 		return nil, result.Bail()
 	}
 
