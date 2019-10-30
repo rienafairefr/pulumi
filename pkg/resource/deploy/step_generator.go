@@ -40,10 +40,10 @@ type stepGenerator struct {
 	plan *Plan   // the plan to which this step generator belongs
 	opts Options // options for this step generator
 
-	// signals that one or more PolicyViolationEvents have been reported to the user, and the plan
-	// should terminate in error. This primarily allows `preview` to aggregate many policy violation
-	// events and report them all at once.
-	hasPolicyViolations bool
+	// signals that one or more errors have been reported to the user, and the plan should terminate
+	// in error. This primarily allows `preview` to aggregate many policy violation events and
+	// report them all at once.
+	sawError bool
 
 	urns           map[resource.URN]bool            // set of URNs discovered for this plan
 	reads          map[resource.URN]bool            // set of URNs read for this plan
@@ -60,6 +60,10 @@ type stepGenerator struct {
 	dependentReplaceKeys map[resource.URN][]resource.PropertyKey
 	// a map from old names (aliased URNs) to the new URN that aliased to them.
 	aliased map[resource.URN]resource.URN
+}
+
+func (sg *stepGenerator) Errored() bool {
+	return sg.sawError
 }
 
 // GenerateReadSteps is responsible for producing one or more steps required to service
@@ -125,6 +129,13 @@ func (sg *stepGenerator) GenerateReadSteps(event ReadResourceEvent) ([]Step, res
 //
 // If the given resource is a custom resource, the step generator will invoke Diff and Check on the
 // provider associated with that resource. If those fail, an error is returned.
+//
+// The bool result value indicates if generating steps reported an error and the planExecutor should
+// continue generating the full plan, but should bail out at the end.  This is useful for the case
+// where a problem is encountered, but we want to keep reporting issues to the user instead of
+// forcing them to repetitively fix/rerun their app to get through it.  This result should only be
+// returned during preview as it is safe to continue then as opposed to during a normal update where
+// this could lead to actual changes to the user stack that may not be wanted.
 func (sg *stepGenerator) GenerateSteps(
 	updateTargetsOpt map[resource.URN]bool, event RegisterResourceEvent) ([]Step, result.Result) {
 
@@ -274,7 +285,7 @@ func (sg *stepGenerator) GenerateSteps(
 				if !sg.plan.preview {
 					invalid = true
 				}
-				sg.hasPolicyViolations = true
+				sg.sawError = true
 			}
 			sg.opts.Events.OnPolicyViolation(new.URN, d)
 		}
@@ -383,9 +394,20 @@ func (sg *stepGenerator) GenerateSteps(
 		d := diag.GetResourceWillBeCreatedButWasNotSpecifiedInTargetList(urn)
 
 		// Targets were specified, but didn't include this resource to create.  Give a particular
-		// error in that case and stop immediately.
-		sg.plan.Diag().Errorf(d, urn)
-		return nil, result.Bail()
+		// error in that case to let them know.
+
+		if sg.plan.preview {
+			// In preview we keep going so that the user will hear about all the problems and can then
+			// fix up their command once (as opposed to adding a target, rerunning, adding a target,
+			// rerunning, etc. etc.).  We let the caller know that they can continue, but should
+			// eventually fail with an error once the entire plan is produced.
+			sg.plan.Diag().Errorf(d, urn)
+			sg.sawError = true
+		} else {
+			// Doing a normal run.  We should not proceed here at all.  We don't want to create
+			// something the user didn't ask for.
+			return nil, result.Bail()
+		}
 	}
 
 	// Case 4: Not Case 1, 2, or 3
@@ -1143,6 +1165,33 @@ func (sg *stepGenerator) calculateDependentReplacements(root *resource.State) ([
 
 	// Return the list of resources to replace.
 	return toReplace, nil
+}
+
+func (sg *stepGenerator) AnalyzeResources() result.Result {
+	resourcesSeen := sg.resourceStates
+	resources := make([]plugin.AnalyzerResource, 0, len(resourcesSeen))
+	for _, v := range resourcesSeen {
+		resources = append(resources, plugin.AnalyzerResource{
+			Type: v.Type,
+			// Unlike Analyze, AnalyzeStack is called on the final outputs of each resource,
+			// to verify the final stack is in a compliant state.
+			Properties: v.Outputs,
+		})
+	}
+
+	analyzers := sg.plan.ctx.Host.ListAnalyzers()
+	for _, analyzer := range analyzers {
+		diagnostics, aErr := analyzer.AnalyzeStack(resources)
+		if aErr != nil {
+			return result.FromError(aErr)
+		}
+		for _, d := range diagnostics {
+			sg.sawError = sg.sawError || (d.EnforcementLevel == apitype.Mandatory)
+			sg.opts.Events.OnPolicyViolation("" /* don't associate with any particular URN */, d)
+		}
+	}
+
+	return nil
 }
 
 // newStepGenerator creates a new step generator that operates on the given plan.
