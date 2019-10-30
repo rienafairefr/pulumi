@@ -267,20 +267,28 @@ func (sg *stepGenerator) GenerateSteps(
 			Type:       new.Type,
 			Properties: inputs,
 		}
-		diagnostics, aErr := analyzer.Analyze(r)
-		if aErr != nil {
-			return nil, result.FromError(aErr)
+		diagnostics, err := analyzer.Analyze(r)
+		if err != nil {
+			return nil, result.FromError(err)
 		}
 		for _, d := range diagnostics {
-			// TODO(hausdorff): Batch up failures and report them all at once during preview. This code here
-			// will cause them to fail eagerly, and stop the plan immediately.
+			// Report the policy violation for all diagnostics we heard about.
+			sg.opts.Events.OnPolicyViolation(new.URN, d)
+
 			if d.EnforcementLevel == apitype.Mandatory {
 				if !sg.plan.preview {
+					// If we're in a a normal update, then stop immediately.  We cannot proceed
+					// through a mandatory policy violation.  During preview however, we do continue
+					// to allow the rest of the plan to be printed (including any further
+					// violations).  This helps ensure the user doesn't have to continually go
+					// through the cycle of "see one error, fix one error, run app" ad-nauseam.
 					invalid = true
 				}
+
+				// Record that step generation encountered an unrecoverable error. We'll then abort
+				// in the executor that is calling into us.
 				sg.sawError = true
 			}
-			sg.opts.Events.OnPolicyViolation(new.URN, d)
 		}
 	}
 
