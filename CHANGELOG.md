@@ -13,6 +13,9 @@ CHANGELOG
   imported by passing the `--force` flag.
   [#3422](https://github.com/pulumi/pulumi/pull/3422)
 
+- Omit unknowns in resources in stack outputs during preview.
+  [#3427](https://github.com/pulumi/pulumi/pull/3427)
+
 - `pulumi update --target` and `pulumi destroy --target` will both error if they determine a
   dependent resource needs to be updated, destroyed, or created that was not was specified in the
   `--target` list.  To proceed with an `update/destroy` after this error, either specify all the

@@ -550,11 +550,9 @@ func (b *localBackend) apply(
 
 // query executes a query program against the resource outputs of a locally hosted stack.
 func (b *localBackend) query(ctx context.Context, op backend.QueryOperation,
-	events chan<- engine.Event) result.Result {
+	callerEventsOpt chan<- engine.Event) result.Result {
 
-	// TODO: Consider implementing this for local backend. We left it out for the initial cut
-	// because we weren't sure we wanted to commit to it.
-	return result.Error("Local backend does not support querying over the state")
+	return backend.RunQuery(ctx, b, op, callerEventsOpt, b.newQuery)
 }
 
 func (b *localBackend) GetHistory(ctx context.Context, stackRef backend.StackReference) ([]backend.UpdateInfo, error) {
