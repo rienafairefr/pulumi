@@ -395,16 +395,17 @@ func (sg *stepGenerator) GenerateSteps(
 		d := diag.GetResourceWillBeCreatedButWasNotSpecifiedInTargetList(urn)
 
 		// Targets were specified, but didn't include this resource to create.  Give a particular
-		// error in that case to let them know.
+		// error in that case to let them know.  Also mark that we're in an error state so that we
+		// eventually will error out of the entire application run.
+		sg.plan.Diag().Errorf(d, urn)
+		sg.sawError = true
 
-		if sg.plan.preview {
+		if !sg.plan.preview {
 			// In preview we keep going so that the user will hear about all the problems and can then
 			// fix up their command once (as opposed to adding a target, rerunning, adding a target,
 			// rerunning, etc. etc.).  We let the caller know that they can continue, but should
 			// eventually fail with an error once the entire plan is produced.
-			sg.plan.Diag().Errorf(d, urn)
-			sg.sawError = true
-		} else {
+			//
 			// Doing a normal run.  We should not proceed here at all.  We don't want to create
 			// something the user didn't ask for.
 			return nil, result.Bail()
