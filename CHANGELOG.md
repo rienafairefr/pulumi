@@ -1,7 +1,7 @@
 CHANGELOG
 =========
 
-## HEAD (Unreleased)
+## 1.4.1 (2019-11-01)
 
 - Adds a **preview** of .NET support for Pulumi. This code is an preview state and is subject
   to change at any point.
@@ -15,6 +15,18 @@ CHANGELOG
 
 - Omit unknowns in resources in stack outputs during preview.
   [#3427](https://github.com/pulumi/pulumi/pull/3427)
+
+- `pulumi update` can now be instructed that a set of resources should be replaced by adding a
+  `--replace urn` argument.  Multiple resources can be specified using `--replace urn1 --replace urn2`. In order to
+  replace exactly one resource and leave other resources unchanged, invoke `pulumi update --replace urn --target urn`,
+  or `pulumi update --target-replace urn` for short.
+  [#3418](https://github.com/pulumi/pulumi/pull/3418)
+
+- `pulumi stack` now renders the stack as a tree view.
+  [#3430](https://github.com/pulumi/pulumi/pull/3430)
+
+- Support for lists and maps in config.
+  [#3342](https://github.com/pulumi/pulumi/pull/3342)
 
 - `pulumi update --target` and `pulumi destroy --target` will both error if they determine a
   dependent resource needs to be updated, destroyed, or created that was not was specified in the
@@ -66,6 +78,9 @@ CHANGELOG
 
 - Support renaming stack projects via `pulumi stack rename`.
   [#3292](https://github.com/pulumi/pulumi/pull/3292)
+
+- Add `helm` to `pulumi/pulumi` Dockerhub container
+  [#3294](https://github.com/pulumi/pulumi/pull/3294)
 
 - Make the location of `.pulumi` folder configurable with an environment variable.
   [#3300](https://github.com/pulumi/pulumi/pull/3300) (Fixes [#2966](https://github.com/pulumi/pulumi/issues/2966))
