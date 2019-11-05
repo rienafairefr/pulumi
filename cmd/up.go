@@ -126,7 +126,7 @@ func newUpCmd() *cobra.Command {
 			Refresh:              refresh,
 			ReplaceTargets:       replaceURNs,
 			UseLegacyDiff:        useLegacyDiff(),
-			UpdateTargets:        targetUrns,
+			UpdateTargets:        targetURNs,
 			TargetDependents:     targetDependents,
 		}
 
