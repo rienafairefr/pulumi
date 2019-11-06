@@ -6,6 +6,16 @@ CHANGELOG
 - Use the update token for renew_lease calls and update the API version to 5.
   [#3348](https://github.com/pulumi/pulumi/pull/3348)
 
+- Codepaths which have a high likelihood of causing a hang will print a message to the console
+  indicating the problem, along with a link to documentation on how to restructure code to best
+  address it.
+
+### Compatibility
+
+- `StackReference.getOutputSync` and `requireOutputSync` are deprecated as they may cause hangs on
+  some combinations of Node and certain OS platforms. `StackReference.getOutput` and `requireOutput`
+  should be used instead.
+
 ## 1.4.1 (2019-11-01)
 
 - Adds a **preview** of .NET support for Pulumi. This code is an preview state and is subject
