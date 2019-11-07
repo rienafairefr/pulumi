@@ -1,6 +1,34 @@
 CHANGELOG
 =========
 
+## HEAD (Unreleased)
+
+- `pulumi policy publish` now determines the Policy Pack name from the Policy Pack, and the the
+  `org-name` CLI argument is now optional. If not specified; the current user account is used.
+  [#3459](https://github.com/pulumi/pulumi/pull/3459)
+
+- `pulumi update --target` and `pulumi destroy --target` will both error if they determine a
+  dependent resource needs to be updated, destroyed, or created that was not was specified in the
+  `--target` list.  To proceed with an `update/destroy` after this error, either specify all the
+  reported resources as `--target`s, or pass the `--target-dependents` flag to allow necessary
+  changes to unspecified dependent targets.
+
+## 1.5.0 (2019-11-06)
+
+- Include the .NET language provider in the Windows SDK.
+
+## 1.5.0 (2019-11-06)
+
+- Gracefully handle errors when resources use duplicate aliases.
+
+- Use the update token for renew_lease calls and update the API version to 5.
+  [#3348](https://github.com/pulumi/pulumi/pull/3348)
+
+- Improve startup time performance by 0.5-1s by checking for a newer CLI release in parallel.
+  [#3441](https://github.com/pulumi/pulumi/pull/3441)
+
+- Add an experimental `pulumi watch` command. [#3391](https://github.com/pulumi/pulumi/pull/3391)
+
 ## 1.4.1 (2019-11-01)
 
 - Adds a **preview** of .NET support for Pulumi. This code is an preview state and is subject
@@ -28,11 +56,8 @@ CHANGELOG
 - Support for lists and maps in config.
   [#3342](https://github.com/pulumi/pulumi/pull/3342)
 
-- `pulumi update --target` and `pulumi destroy --target` will both error if they determine a
-  dependent resource needs to be updated, destroyed, or created that was not was specified in the
-  `--target` list.  To proceed with an `update/destroy` after this error, either specify all the
-  reported resources as `--target`s, or pass the `--target-dependents` flag to allow necessary
-  changes to unspecified dependent targets.
+- `ResourceProvider#StreamInvoke` implemented, will be the basis for streaming
+  APIs in `pulumi query`. [#3424](https://github.com/pulumi/pulumi/pull/3424)
 
 ## 1.4.0 (2019-10-24)
 
