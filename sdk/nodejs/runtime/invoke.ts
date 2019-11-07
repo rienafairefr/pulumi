@@ -355,7 +355,7 @@ function serializePropertiesSync(prop: any): any {
     }
 }
 
-function deserializeResponse(tok: string, resp: any) {
+function deserializeResponse(tok: string, resp: any): any {
     const failures: any = resp.getFailuresList();
     if (failures && failures.length) {
         let reasons = "";
@@ -370,5 +370,8 @@ function deserializeResponse(tok: string, resp: any) {
         throw new Error(`Invoke of '${tok}' failed: ${reasons}`);
     }
 
-    return deserializeProperties(resp.getReturn());
+    const ret = resp.getReturn();
+    return ret === undefined
+        ? ret
+        : deserializeProperties(ret);
 }

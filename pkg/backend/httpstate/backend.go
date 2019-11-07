@@ -425,7 +425,15 @@ func (b *cloudBackend) parsePolicyPackReference(s string) (backend.PolicyPackRef
 		policyPackName = split[1]
 	default:
 		return nil, errors.Errorf("could not parse policy pack name '%s'; must be of the form "+
-			"<orgName>/<policyPackName>", s)
+			"<org-name>/<policy-pack-name>", s)
+	}
+
+	if orgName == "" {
+		currentUser, userErr := b.CurrentUser()
+		if userErr != nil {
+			return nil, userErr
+		}
+		orgName = currentUser
 	}
 
 	return newCloudBackendPolicyPackReference(orgName, tokens.QName(policyPackName)), nil
@@ -589,9 +597,16 @@ func (b *cloudBackend) CreateStack(
 
 	apistack, err := b.client.CreateStack(ctx, stackID, tags)
 	if err != nil {
-		// If the status is 409 Conflict (stack already exists), return StackAlreadyExistsError.
+		// Wire through well-known error types.
 		if errResp, ok := err.(*apitype.ErrorResponse); ok && errResp.Code == http.StatusConflict {
-			return nil, &backend.StackAlreadyExistsError{StackName: stackID.Stack}
+			// A 409 error response is returned when per-stack organizations are over their limit,
+			// so we need to look at the message to differentiate.
+			if strings.Contains(errResp.Message, "already exists") {
+				return nil, &backend.StackAlreadyExistsError{StackName: stackID.Stack}
+			}
+			if strings.Contains(errResp.Message, "you are using") {
+				return nil, &backend.OverStackLimitError{Message: errResp.Message}
+			}
 		}
 		return nil, err
 	}

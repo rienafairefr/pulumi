@@ -3,6 +3,11 @@ CHANGELOG
 
 ## HEAD (Unreleased)
 
+- `pulumi policy publish` now determines the Policy Pack name from the Policy Pack, and the
+  the `org-name` CLI argument is now optional. If not specified; the current user account is
+  used.
+  [#3459](https://github.com/pulumi/pulumi/pull/3459)
+
 - Codepaths which have a high likelihood of causing a hang will print a message to the console
   indicating the problem, along with a link to documentation on how to restructure code to best
   address it.
@@ -11,6 +16,10 @@ CHANGELOG
 
 - Using `StackReference.getOutputSync` and `requireOutputSync` in conjunction with a StackReference
   whose name is a `Promise<string>` or `Output<string>` is not recommended and will now warn as it may cause hangs.
+
+## 1.5.0 (2019-11-06)
+
+- Include the .NET language provider in the Windows SDK.
 
 ## 1.5.0 (2019-11-06)
 
