@@ -48,13 +48,18 @@ type stepGenerator struct {
 	// report them all at once.
 	sawError bool
 
-	urns           map[resource.URN]bool            // set of URNs discovered for this plan
-	reads          map[resource.URN]bool            // set of URNs read for this plan
-	deletes        map[resource.URN]bool            // set of URNs deleted in this plan
-	replaces       map[resource.URN]bool            // set of URNs replaced in this plan
-	updates        map[resource.URN]bool            // set of URNs updated in this plan
-	creates        map[resource.URN]bool            // set of URNs created in this plan
-	sames          map[resource.URN]bool            // set of URNs that were not changed in this plan
+	urns     map[resource.URN]bool // set of URNs discovered for this plan
+	reads    map[resource.URN]bool // set of URNs read for this plan
+	deletes  map[resource.URN]bool // set of URNs deleted in this plan
+	replaces map[resource.URN]bool // set of URNs replaced in this plan
+	updates  map[resource.URN]bool // set of URNs updated in this plan
+	creates  map[resource.URN]bool // set of URNs created in this plan
+	sames    map[resource.URN]bool // set of URNs that were not changed in this plan
+
+	// set of URNs that would have been created, but were filtered out because the user didn't
+	// specify them with --target
+	skippedCreates map[resource.URN]bool
+
 	pendingDeletes map[*resource.State]bool         // set of resources (not URNs!) that are pending deletion
 	providers      map[resource.URN]*resource.State // URN map of providers that we have seen so far.
 	resourceStates map[resource.URN]*resource.State // URN map of state for ALL resources we have seen so far.
@@ -70,7 +75,7 @@ func (sg *stepGenerator) Errored() bool {
 }
 
 func (sg *stepGenerator) isTargetedForUpdate(urn resource.URN) bool {
-	return sg.updateTargetsOpt == nil || sg.updateTargetsOpt[urn] || sg.opts.TargetDependents
+	return sg.updateTargetsOpt == nil || sg.updateTargetsOpt[urn]
 }
 
 func (sg *stepGenerator) isTargetedReplace(urn resource.URN) bool {
@@ -141,6 +146,63 @@ func (sg *stepGenerator) GenerateReadSteps(event ReadResourceEvent) ([]Step, res
 // If the given resource is a custom resource, the step generator will invoke Diff and Check on the
 // provider associated with that resource. If those fail, an error is returned.
 func (sg *stepGenerator) GenerateSteps(event RegisterResourceEvent) ([]Step, result.Result) {
+	steps, res := sg.generateBasicSteps(event)
+	if res != nil {
+		contract.Assert(len(steps) == 0)
+		return nil, res
+	}
+
+	// we got a set of steps to perfom.  If any of the steps to perform depended on any resources we
+	// skipped creating (because they were not in a --target list) then issue an error that that
+	// create was necessary and that the user needed to supply it explicitly.
+	return sg.checkForSkippedCreateDependencies(steps)
+}
+
+func (sg *stepGenerator) checkForSkippedCreateDependencies(steps []Step) ([]Step, result.Result) {
+	for _, step := range steps {
+		// Note: we don't have an error if the step we're looking is itself another skipped-creation
+		// step (even if it references another skipped creation). Instead, we'll error out if *that*
+		// creation is used in an actual targetted change.
+		if sameStep, ok := step.(*SameStep); ok && sameStep.IsSkippedCreation() {
+			continue
+		}
+
+		new := step.New()
+		if new == nil {
+			continue
+		}
+
+		for _, urns := range new.PropertyDependencies {
+			for _, urn := range urns {
+				if sg.skippedCreates[urn] {
+					// Targets were specified, but didn't include this resource to create.  And a
+					// resource we are producing a step for does depend on this created resource.
+					// Give a particular error in that case to let them know.  Also mark that we're
+					// in an error state so that we eventually will error out of the entire
+					// application run.
+					d := diag.GetResourceWillBeCreatedButWasNotSpecifiedInTargetList(step.URN())
+
+					sg.plan.Diag().Errorf(d, step.URN(), urn)
+					sg.sawError = true
+
+					if !sg.plan.preview {
+						// In preview we keep going so that the user will hear about all the problems and can then
+						// fix up their command once (as opposed to adding a target, rerunning, adding a target,
+						// rerunning, etc. etc.).
+						//
+						// Doing a normal run.  We should not proceed here at all.  We don't want to create
+						// something the user didn't ask for.
+						return nil, result.Bail()
+					}
+				}
+			}
+		}
+	}
+
+	return steps, nil
+}
+
+func (sg *stepGenerator) generateBasicSteps(event RegisterResourceEvent) ([]Step, result.Result) {
 
 	var invalid bool // will be set to true if this object fails validation.
 
@@ -402,29 +464,36 @@ func (sg *stepGenerator) GenerateSteps(event RegisterResourceEvent) ([]Step, res
 		return []Step{NewSameStep(sg.plan, event, old, new)}, nil
 	}
 
-	if !sg.isTargetedForUpdate(urn) {
-		d := diag.GetResourceWillBeCreatedButWasNotSpecifiedInTargetList(urn)
-
-		// Targets were specified, but didn't include this resource to create.  Give a particular
-		// error in that case to let them know.  Also mark that we're in an error state so that we
-		// eventually will error out of the entire application run.
-		sg.plan.Diag().Errorf(d, urn)
-		sg.sawError = true
-
-		if !sg.plan.preview {
-			// In preview we keep going so that the user will hear about all the problems and can then
-			// fix up their command once (as opposed to adding a target, rerunning, adding a target,
-			// rerunning, etc. etc.).
-			//
-			// Doing a normal run.  We should not proceed here at all.  We don't want to create
-			// something the user didn't ask for.
-			return nil, result.Bail()
-		}
-	}
-
 	// Case 4: Not Case 1, 2, or 3
 	//  If a resource isn't being recreated and it's not being updated or replaced,
 	//  it's just being created.
+
+	// We're in the create stage now.  In a normal run just issue a 'create step'. If, however, the
+	// user is doing a run with `--target`s, then we need to operate specially here.
+	//
+	// 1. If the user did include this resource urn in the --target list, then we can proceed
+	// normally and issue a create step for this.
+	//
+	// 2. However, if they did not include the resource in the --target list, then we want to flat
+	// out ignore it (just like we ignore updates to resource not in the --target list).  This has
+	// interesting implications though. Specifically, what to do if a prop from this resource is
+	// then actually needed by a property we *are* doing a targetted create/update for.
+	//
+	// In that case, we want to error to force the user to be explicit about wanting this resource
+	// to be created. However, we can't issue the error until later on when the resource is
+	// referenced. So, to support this we create a special "same" step here for this resource. That
+	// "same" step has a bit on it letting us know that it is for this case. If we then later see a
+	// resource that depends on this resource, we will issue an error letting the user know.
+	//
+	// We will also not record this non-created resource into the checkpoint as it doesn't actually
+	// exist.
+
+	if !sg.isTargetedForUpdate(urn) {
+		sg.sames[urn] = true
+		sg.skippedCreates[urn] = true
+		return []Step{NewSkippedCreationSameStep(sg.plan, event, new)}, nil
+	}
+
 	sg.creates[urn] = true
 	logging.V(7).Infof("Planner decided to create '%v' (inputs=%v)", urn, new.Inputs)
 	return []Step{NewCreateStep(sg.plan, event, new)}, nil
