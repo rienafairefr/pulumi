@@ -88,7 +88,7 @@ func NewSameStep(plan *Plan, reg RegisterResourceEvent, old *resource.State, new
 	}
 }
 
-// NewSkippedCreationSameStep produces a SameStep for a resource that was created but not targetted
+// NewSkippedCreationSameStep produces a SameStep for a resource that was created but not targeted
 // by the user (and this was skipped). These act as no-op steps (hence 'same') since we are not
 // actually creating the resource, but ensure that we complete resource-registration and convey the
 // right information downstream. For example, we will not write these into the checkpoint file.

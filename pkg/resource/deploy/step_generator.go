@@ -162,7 +162,7 @@ func (sg *stepGenerator) checkForSkippedCreateDependencies(steps []Step) ([]Step
 	for _, step := range steps {
 		// Note: we don't have an error if the step we're looking is itself another skipped-creation
 		// step (even if it references another skipped creation). Instead, we'll error out if *that*
-		// creation is used in an actual targetted change.
+		// creation is used in an actual targeted change.
 		if sameStep, ok := step.(*SameStep); ok && sameStep.IsSkippedCreation() {
 			continue
 		}
@@ -477,7 +477,7 @@ func (sg *stepGenerator) generateBasicSteps(event RegisterResourceEvent) ([]Step
 	// 2. However, if they did not include the resource in the --target list, then we want to flat
 	// out ignore it (just like we ignore updates to resource not in the --target list).  This has
 	// interesting implications though. Specifically, what to do if a prop from this resource is
-	// then actually needed by a property we *are* doing a targetted create/update for.
+	// then actually needed by a property we *are* doing a targeted create/update for.
 	//
 	// In that case, we want to error to force the user to be explicit about wanting this resource
 	// to be created. However, we can't issue the error until later on when the resource is
@@ -488,7 +488,9 @@ func (sg *stepGenerator) generateBasicSteps(event RegisterResourceEvent) ([]Step
 	// We will also not record this non-created resource into the checkpoint as it doesn't actually
 	// exist.
 
-	if !sg.isTargetedForUpdate(urn) {
+	if !sg.isTargetedForUpdate(urn) &&
+		!providers.IsProviderType(goal.Type) {
+
 		sg.sames[urn] = true
 		sg.skippedCreates[urn] = true
 		return []Step{NewSkippedCreationSameStep(sg.plan, event, new)}, nil
@@ -1308,6 +1310,7 @@ func newStepGenerator(
 		replaces:             make(map[resource.URN]bool),
 		updates:              make(map[resource.URN]bool),
 		deletes:              make(map[resource.URN]bool),
+		skippedCreates:       make(map[resource.URN]bool),
 		pendingDeletes:       make(map[*resource.State]bool),
 		providers:            make(map[resource.URN]*resource.State),
 		resourceStates:       make(map[resource.URN]*resource.State),

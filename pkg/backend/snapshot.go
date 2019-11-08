@@ -176,8 +176,8 @@ func (ssm *sameSnapshotMutation) mustWrite(step *deploy.SameStep) bool {
 	contract.Assert(old.Delete == new.Delete)
 	contract.Assert(old.External == new.External)
 
-	if step.IsUntargetedCreate() {
-		// In the case of a 'reource create' in a program that wasn't specified by the user in the
+	if step.IsSkippedCreation() {
+		// In the case of a 'resource create' in a program that wasn't specified by the user in the
 		// --target list, we *never* want to write this to the checkpoint.  We treat it as if it
 		// doesn't exist at all.  That way when the program runs the next time, we'll actually
 		// create it.
