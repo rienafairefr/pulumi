@@ -172,28 +172,26 @@ func (sg *stepGenerator) checkForSkippedCreateDependencies(steps []Step) ([]Step
 			continue
 		}
 
-		for _, urns := range new.PropertyDependencies {
-			for _, urn := range urns {
-				if sg.skippedCreates[urn] {
-					// Targets were specified, but didn't include this resource to create.  And a
-					// resource we are producing a step for does depend on this created resource.
-					// Give a particular error in that case to let them know.  Also mark that we're
-					// in an error state so that we eventually will error out of the entire
-					// application run.
-					d := diag.GetResourceWillBeCreatedButWasNotSpecifiedInTargetList(step.URN())
+		for _, urn := range new.Dependencies {
+			if sg.skippedCreates[urn] {
+				// Targets were specified, but didn't include this resource to create.  And a
+				// resource we are producing a step for does depend on this created resource.
+				// Give a particular error in that case to let them know.  Also mark that we're
+				// in an error state so that we eventually will error out of the entire
+				// application run.
+				d := diag.GetResourceWillBeCreatedButWasNotSpecifiedInTargetList(step.URN())
 
-					sg.plan.Diag().Errorf(d, step.URN(), urn)
-					sg.sawError = true
+				sg.plan.Diag().Errorf(d, step.URN(), urn)
+				sg.sawError = true
 
-					if !sg.plan.preview {
-						// In preview we keep going so that the user will hear about all the problems and can then
-						// fix up their command once (as opposed to adding a target, rerunning, adding a target,
-						// rerunning, etc. etc.).
-						//
-						// Doing a normal run.  We should not proceed here at all.  We don't want to create
-						// something the user didn't ask for.
-						return nil, result.Bail()
-					}
+				if !sg.plan.preview {
+					// In preview we keep going so that the user will hear about all the problems and can then
+					// fix up their command once (as opposed to adding a target, rerunning, adding a target,
+					// rerunning, etc. etc.).
+					//
+					// Doing a normal run.  We should not proceed here at all.  We don't want to create
+					// something the user didn't ask for.
+					return nil, result.Bail()
 				}
 			}
 		}
