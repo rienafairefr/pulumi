@@ -162,6 +162,7 @@ Pulumi.Serialization.OutputTypeAttribute
 Pulumi.Serialization.OutputTypeAttribute.OutputTypeAttribute() -> void
 Pulumi.StringAsset
 Pulumi.StringAsset.StringAsset(string text) -> void
+Pulumi.Urn
 static Pulumi.ComponentResourceOptions.Merge(Pulumi.ResourceOptions options1, Pulumi.ResourceOptions options2) -> Pulumi.ComponentResourceOptions
 static Pulumi.CustomResourceOptions.Merge(Pulumi.ResourceOptions options1, Pulumi.ResourceOptions options2) -> Pulumi.CustomResourceOptions
 static Pulumi.Deployment.Instance.get -> Pulumi.IDeployment
@@ -219,4 +220,5 @@ static Pulumi.Output.Tuple<T1, T2>(Pulumi.Input<T1> item1, Pulumi.Input<T2> item
 static Pulumi.Output.Tuple<T1, T2>(Pulumi.Output<T1> item1, Pulumi.Output<T2> item2) -> Pulumi.Output<(T1, T2)>
 static Pulumi.Output<T>.Create(System.Threading.Tasks.Task<T> value) -> Pulumi.Output<T>
 static Pulumi.ResourceOptions.Merge(Pulumi.ResourceOptions options1, Pulumi.ResourceOptions options2) -> Pulumi.ResourceOptions
+static Pulumi.Urn.Create(Pulumi.Input<string> name, Pulumi.Input<string> type, Pulumi.Resource parent = null, Pulumi.Input<string> parentUrn = null, Pulumi.Input<string> project = null, Pulumi.Input<string> stack = null) -> Pulumi.Output<string>
 static readonly Pulumi.ResourceArgs.Empty -> Pulumi.ResourceArgs

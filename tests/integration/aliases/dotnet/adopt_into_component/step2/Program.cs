@@ -30,7 +30,7 @@ class Component : ComponentResource
                 // But with an alias provided based on knowing where the resource existing before - in this case at top
                 // level.  We use an absolute URN instead of a relative `Alias` because we are referencing a fixed resource
                 // that was in some arbitrary other location in the hierarchy prior to being adopted into this component.
-                Aliases = { new Alias { Urn = "my:module:Resource::res2" } },
+                Aliases = { Pulumi.Urn.Create("res2", "my:module:Resource").Apply(urn => new Alias { Urn = urn }) },
             });
     }
 }
@@ -107,8 +107,3 @@ class Program
     });
     }
 }
-
-
-
-
-//new Component4("duplicateAliases", { parent: comp2 });

@@ -67,6 +67,6 @@ class Program
             new Component3("parentedbycomponent", new ComponentResourceOptions { Parent = comp2 });
 
             new Component4("duplicateAliases", new ComponentResourceOptions { Parent = comp2 });
-    });
+        });
     }
 }
