@@ -8,6 +8,12 @@ CHANGELOG
   used.
   [#3459](https://github.com/pulumi/pulumi/pull/3459)
 
+- Re-apply "propagate resource inputs to resource state during preview, including first-class unknown values." The new
+  set of changes have additional fixes to ensure backwards compatibility with earlier code. This allows the preview to
+  better estimate the state of a resource after an update, including property values that were populated using defaults
+  calculated by the provider.
+  [#3327](https://github.com/pulumi/pulumi/pull/3327)
+
 - Codepaths which have a high likelihood of causing a hang will print a message to the console
   indicating the problem, along with a link to documentation on how to restructure code to best
   address it.
@@ -17,7 +23,7 @@ CHANGELOG
 - Using `StackReference.getOutputSync` and `requireOutputSync` in conjunction with a StackReference
   whose name is a `Promise<string>` or `Output<string>` is not recommended and will now warn as it may cause hangs.
 
-## 1.5.0 (2019-11-06)
+## 1.5.1 (2019-11-06)
 
 - Include the .NET language provider in the Windows SDK.
 
