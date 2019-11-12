@@ -15,11 +15,12 @@
 package pulumi
 
 import (
+	"reflect"
 	"testing"
 
+	"github.com/pulumi/pulumi/pkg/resource"
+	"github.com/pulumi/pulumi/pkg/resource/plugin"
 	"github.com/stretchr/testify/assert"
-
-	"github.com/pulumi/pulumi/sdk/go/pulumi/asset"
 )
 
 // TestMarshalRoundtrip ensures that marshaling a complex structure to and from its on-the-wire gRPC format succeeds.
@@ -28,55 +29,58 @@ func TestMarshalRoundtrip(t *testing.T) {
 	out, resolve, _ := NewOutput()
 	resolve("outputty")
 	out2 := newOutput()
-	out2.s.fulfill(nil, false, nil)
+	out2.fulfill(nil, false, nil)
 	out3 := Output{}
-	input := map[string]interface{}{
-		"s":            "a string",
-		"a":            true,
-		"b":            42,
-		"cStringAsset": asset.NewStringAsset("put a lime in the coconut"),
-		"cFileAsset":   asset.NewFileAsset("foo.txt"),
-		"cRemoteAsset": asset.NewRemoteAsset("https://pulumi.com/fake/asset.txt"),
-		"dAssetArchive": asset.NewAssetArchive(map[string]interface{}{
-			"subAsset":   asset.NewFileAsset("bar.txt"),
-			"subArchive": asset.NewFileArchive("bar.zip"),
+	input := map[string]Input{
+		"s":            String("a string"),
+		"a":            Bool(true),
+		"b":            Int(42),
+		"cStringAsset": NewStringAsset("put a lime in the coconut"),
+		"cFileAsset":   NewFileAsset("foo.txt"),
+		"cRemoteAsset": NewRemoteAsset("https://pulumi.com/fake/txt"),
+		"dAssetArchive": NewAssetArchive(map[string]interface{}{
+			"subAsset":   NewFileAsset("bar.txt"),
+			"subArchive": NewFileArchive("bar.zip"),
 		}),
-		"dFileArchive":   asset.NewFileArchive("foo.zip"),
-		"dRemoteArchive": asset.NewRemoteArchive("https://pulumi.com/fake/archive.zip"),
-		"e":              out,
-		"fArray":         []interface{}{0, 1.3, "x", false},
-		"fMap": map[string]interface{}{
+		"dFileArchive":   NewFileArchive("foo.zip"),
+		"dRemoteArchive": NewRemoteArchive("https://pulumi.com/fake/archive.zip"),
+		"e":              StringOutput(out),
+		"fArray":         Array([]interface{}{0, 1.3, "x", false}),
+		"fMap": Map(map[string]interface{}{
 			"x": "y",
 			"y": 999.9,
 			"z": false,
-		},
-		"g": out2,
+		}),
+		"g": StringOutput(out2),
 		"h": URN("foo"),
-		"i": out3,
+		"i": StringOutput(out3),
 	}
 
 	// Marshal those inputs.
-	m, pdeps, deps, err := marshalInputs(input, true)
+	resolved, pdeps, deps, err := marshalInputs(input)
+	assert.Nil(t, err)
+
 	if !assert.Nil(t, err) {
 		assert.Equal(t, len(input), len(pdeps))
 		assert.Equal(t, 0, len(deps))
 
 		// Now just unmarshal and ensure the resulting map matches.
-		res, err := unmarshalOutputs(m)
+		resV, err := unmarshalPropertyValue(resource.NewObjectProperty(resolved))
 		if !assert.Nil(t, err) {
-			if !assert.NotNil(t, res) {
+			if !assert.NotNil(t, resV) {
+				res := resV.(map[string]interface{})
 				assert.Equal(t, "a string", res["s"])
 				assert.Equal(t, true, res["a"])
 				assert.Equal(t, 42, res["b"])
-				assert.Equal(t, "put a lime in the coconut", res["cStringAsset"].(asset.Asset).Text())
-				assert.Equal(t, "foo.txt", res["cFileAsset"].(asset.Asset).Path())
-				assert.Equal(t, "https://pulumi.com/fake/asset.txt", res["cRemoteAsset"].(asset.Asset).URI())
-				ar := res["dAssetArchive"].(asset.Archive).Assets()
+				assert.Equal(t, "put a lime in the coconut", res["cStringAsset"].(Asset).Text())
+				assert.Equal(t, "foo.txt", res["cFileAsset"].(Asset).Path())
+				assert.Equal(t, "https://pulumi.com/fake/txt", res["cRemoteAsset"].(Asset).URI())
+				ar := res["dAssetArchive"].(Archive).Assets()
 				assert.Equal(t, 2, len(ar))
-				assert.Equal(t, "bar.txt", ar["subAsset"].(asset.Asset).Path())
-				assert.Equal(t, "bar.zip", ar["subrchive"].(asset.Archive).Path())
-				assert.Equal(t, "foo.zip", res["dFileArchive"].(asset.Archive).Path())
-				assert.Equal(t, "https://pulumi.com/fake/archive.zip", res["dRemoteArchive"].(asset.Archive).URI())
+				assert.Equal(t, "bar.txt", ar["subAsset"].(Asset).Path())
+				assert.Equal(t, "bar.zip", ar["subrchive"].(Archive).Path())
+				assert.Equal(t, "foo.zip", res["dFileArchive"].(Archive).Path())
+				assert.Equal(t, "https://pulumi.com/fake/archive.zip", res["dRemoteArchive"].(Archive).URI())
 				assert.Equal(t, "outputty", res["e"])
 				aa := res["fArray"].([]interface{})
 				assert.Equal(t, 4, len(aa))
@@ -95,92 +99,217 @@ func TestMarshalRoundtrip(t *testing.T) {
 			}
 		}
 	}
+}
 
-	// Marshal those inputs without unknowns.
-	m, pdeps, deps, err = marshalInputs(input, false)
-	if !assert.Nil(t, err) {
-		assert.Equal(t, len(input), len(pdeps))
-		assert.Equal(t, 0, len(deps))
+type nestedTypeInput interface {
+	Input
 
-		// Now just unmarshal and ensure the resulting map matches.
-		res, err := unmarshalOutputs(m)
-		if !assert.Nil(t, err) {
-			if !assert.NotNil(t, res) {
-				assert.Equal(t, "a string", res["s"])
-				assert.Equal(t, true, res["a"])
-				assert.Equal(t, 42, res["b"])
-				assert.Equal(t, "put a lime in the coconut", res["cStringAsset"].(asset.Asset).Text())
-				assert.Equal(t, "foo.txt", res["cFileAsset"].(asset.Asset).Path())
-				assert.Equal(t, "https://pulumi.com/fake/asset.txt", res["cRemoteAsset"].(asset.Asset).URI())
-				ar := res["dAssetArchive"].(asset.Archive).Assets()
-				assert.Equal(t, 2, len(ar))
-				assert.Equal(t, "bar.txt", ar["subAsset"].(asset.Asset).Path())
-				assert.Equal(t, "bar.zip", ar["subrchive"].(asset.Archive).Path())
-				assert.Equal(t, "foo.zip", res["dFileArchive"].(asset.Archive).Path())
-				assert.Equal(t, "https://pulumi.com/fake/archive.zip", res["dRemoteArchive"].(asset.Archive).URI())
-				assert.Equal(t, "outputty", res["e"])
-				aa := res["fArray"].([]interface{})
-				assert.Equal(t, 4, len(aa))
-				assert.Equal(t, 0, aa[0])
-				assert.Equal(t, 1.3, aa[1])
-				assert.Equal(t, "x", aa[2])
-				assert.Equal(t, false, aa[3])
-				am := res["fMap"].(map[string]interface{})
-				assert.Equal(t, 3, len(am))
-				assert.Equal(t, "y", am["x"])
-				assert.Equal(t, 999.9, am["y"])
-				assert.Equal(t, false, am["z"])
-				assert.Equal(t, nil, res["g"])
-				assert.Equal(t, "foo", res["h"])
-				assert.Equal(t, nil, res["i"])
-			}
-		}
-	}
+	isNestedType()
+}
+
+var nestedTypeType = reflect.TypeOf((*nestedType)(nil))
+
+type nestedType struct {
+	Foo string `pulumi:"foo"`
+	Bar int    `pulumi:"bar"`
+}
+
+func (*nestedType) ElementType() reflect.Type {
+	return nestedTypeType
+}
+
+func (*nestedType) isNestedType() {}
+
+type nestedTypeInputs struct {
+	Foo StringInput `pulumi:"foo"`
+	Bar IntInput    `pulumi:"bar"`
+}
+
+func (*nestedTypeInputs) ElementType() reflect.Type {
+	return nestedTypeType
+}
+
+func (*nestedTypeInputs) isNestedType() {}
+
+type nestedTypeOutput Output
+
+func (nestedTypeOutput) ElementType() reflect.Type {
+	return nestedTypeType
+}
+
+func (nestedTypeOutput) isNestedType() {}
+
+type testResource struct {
+	URN URNOutput `pulumi:"urn"`
+	ID  IDOutput  `pulumi:"id"`
+
+	Any     AnyOutput     `pulumi:"any"`
+	Archive ArchiveOutput `pulumi:"archive"`
+	Array   ArrayOutput   `pulumi:"array"`
+	Asset   AssetOutput   `pulumi:"asset"`
+	Bool    BoolOutput    `pulumi:"bool"`
+	Float32 Float32Output `pulumi:"float32"`
+	Float64 Float64Output `pulumi:"float64"`
+	Int     IntOutput     `pulumi:"int"`
+	Int8    Int8Output    `pulumi:"int8"`
+	Int16   Int16Output   `pulumi:"int16"`
+	Int32   Int32Output   `pulumi:"int32"`
+	Int64   Int64Output   `pulumi:"int64"`
+	Map     MapOutput     `pulumi:"map"`
+	String  StringOutput  `pulumi:"string"`
+	Uint    UintOutput    `pulumi:"uint"`
+	Uint8   Uint8Output   `pulumi:"uint8"`
+	Uint16  Uint16Output  `pulumi:"uint16"`
+	Uint32  Uint32Output  `pulumi:"uint32"`
+	Uint64  Uint64Output  `pulumi:"uint64"`
+
+	NestedA nestedTypeOutput `pulumi:"nestedA"`
+	NestedB nestedTypeOutput `pulumi:"nestedB"`
+}
+
+func (r *testResource) GetURN() URNOutput {
+	return r.URN
+}
+
+func (r *testResource) GetID() IDOutput {
+	return r.ID
 }
 
 func TestResourceState(t *testing.T) {
-	state := makeResourceState(true, map[string]interface{}{"baz": nil})
+	var theResource testResource
+	state := makeResourceState(&theResource)
 
-	s, _, _, _ := marshalInputs(map[string]interface{}{"baz": "qux"}, true)
+	resolved, _, _, _ := marshalInputs(map[string]Input{
+		"any":     Any("foo"),
+		"archive": NewRemoteArchive("https://pulumi.com/fake/archive.zip"),
+		"array":   Array([]interface{}{"foo"}),
+		"asset":   NewStringAsset("put a lime in the coconut"),
+		"bool":    Bool(true),
+		"float32": Float32(42.0),
+		"float64": Float64(3.14),
+		"int":     Int(-1),
+		"int8":    Int8(-2),
+		"int16":   Int16(-3),
+		"int32":   Int32(-4),
+		"int64":   Int64(-5),
+		"map":     Map(map[string]interface{}{"foo": "bar"}),
+		"string":  String("qux"),
+		"uint":    Uint(1),
+		"uint8":   Uint8(2),
+		"uint16":  Uint16(3),
+		"uint32":  Uint32(4),
+		"uint64":  Uint64(5),
+
+		"nestedA": &nestedType{
+			Foo: "bar",
+			Bar: 42,
+		},
+		"nestedB": &nestedTypeInputs{
+			Foo: String("baz"),
+			Bar: Int(24),
+		},
+	})
+	s, err := plugin.MarshalProperties(
+		resolved,
+		plugin.MarshalOptions{KeepUnknowns: true})
 	state.resolve(false, nil, nil, "foo", "bar", s)
 
-	input := map[string]interface{}{
-		"urn": state.urn,
-		"id":  state.id,
-		"baz": state.State["baz"],
+	input := map[string]Input{
+		"urn":     theResource.URN,
+		"id":      theResource.ID,
+		"any":     theResource.Any,
+		"archive": theResource.Archive,
+		"array":   theResource.Array,
+		"asset":   theResource.Asset,
+		"bool":    theResource.Bool,
+		"float32": theResource.Float32,
+		"float64": theResource.Float64,
+		"int":     theResource.Int,
+		"int8":    theResource.Int8,
+		"int16":   theResource.Int16,
+		"int32":   theResource.Int32,
+		"int64":   theResource.Int64,
+		"map":     theResource.Map,
+		"string":  theResource.String,
+		"uint":    theResource.Uint,
+		"uint8":   theResource.Uint8,
+		"uint16":  theResource.Uint16,
+		"uint32":  theResource.Uint32,
+		"uint64":  theResource.Uint64,
+		"nestedA": theResource.NestedA,
+		"nestedB": theResource.NestedB,
 	}
-	m, pdeps, deps, err := marshalInputs(input, true)
+	resolved, pdeps, deps, err := marshalInputs(input)
 	assert.Nil(t, err)
 	assert.Equal(t, map[string][]URN{
-		"urn": {"foo"},
-		"id":  {"foo"},
-		"baz": {"foo"},
+		"urn":     {"foo"},
+		"id":      {"foo"},
+		"any":     {"foo"},
+		"archive": {"foo"},
+		"array":   {"foo"},
+		"asset":   {"foo"},
+		"bool":    {"foo"},
+		"float32": {"foo"},
+		"float64": {"foo"},
+		"int":     {"foo"},
+		"int8":    {"foo"},
+		"int16":   {"foo"},
+		"int32":   {"foo"},
+		"int64":   {"foo"},
+		"map":     {"foo"},
+		"string":  {"foo"},
+		"uint":    {"foo"},
+		"uint8":   {"foo"},
+		"uint16":  {"foo"},
+		"uint32":  {"foo"},
+		"uint64":  {"foo"},
+		"nestedA": {"foo"},
+		"nestedB": {"foo"},
 	}, pdeps)
-	assert.Equal(t, []URN{"foo", "foo", "foo"}, deps)
+	assert.Equal(t, []URN{"foo"}, deps)
 
-	res, err := unmarshalOutputs(m)
+	res, err := unmarshalPropertyValue(resource.NewObjectProperty(resolved))
 	assert.Nil(t, err)
 	assert.Equal(t, map[string]interface{}{
-		"urn": "foo",
-		"id":  "bar",
-		"baz": "qux",
+		"urn":     "foo",
+		"id":      "bar",
+		"any":     "foo",
+		"archive": NewRemoteArchive("https://pulumi.com/fake/archive.zip"),
+		"array":   []interface{}{"foo"},
+		"asset":   NewStringAsset("put a lime in the coconut"),
+		"bool":    true,
+		"float32": 42.0,
+		"float64": 3.14,
+		"int":     -1.0,
+		"int8":    -2.0,
+		"int16":   -3.0,
+		"int32":   -4.0,
+		"int64":   -5.0,
+		"map":     map[string]interface{}{"foo": "bar"},
+		"string":  "qux",
+		"uint":    1.0,
+		"uint8":   2.0,
+		"uint16":  3.0,
+		"uint32":  4.0,
+		"uint64":  5.0,
+		"nestedA": map[string]interface{}{
+			"foo": "bar",
+			"bar": 42.0,
+		},
+		"nestedB": map[string]interface{}{
+			"foo": "baz",
+			"bar": 24.0,
+		},
 	}, res)
 }
 
 func TestUnmarshalUnsupportedSecret(t *testing.T) {
-	m, _, err := marshalInput(map[string]interface{}{
-		rpcTokenSpecialSigKey: rpcTokenSpecialSecretSig,
-	})
-	assert.NoError(t, err)
-	_, err = unmarshalOutput(m)
-	assert.Error(t, err)
-}
+	secret := resource.MakeSecret(resource.NewPropertyValue("foo"))
 
-func TestUnmarshalUnknownSig(t *testing.T) {
-	m, _, err := marshalInput(map[string]interface{}{
-		rpcTokenSpecialSigKey: "foobar",
-	})
-	assert.NoError(t, err)
-	_, err = unmarshalOutput(m)
+	_, err := unmarshalPropertyValue(secret)
+	assert.Error(t, err)
+
+	var sv string
+	err = unmarshalOutput(secret, reflect.ValueOf(&sv).Elem())
 	assert.Error(t, err)
 }

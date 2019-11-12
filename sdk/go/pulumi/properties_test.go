@@ -23,7 +23,7 @@ import (
 )
 
 func assertApplied(t *testing.T, o Output) {
-	_, known, err := o.s.await(context.Background())
+	_, known, err := o.await(context.Background())
 	assert.True(t, known)
 	assert.Nil(t, err)
 }
@@ -35,7 +35,7 @@ func TestBasicOutputs(t *testing.T) {
 		go func() {
 			resolve(42)
 		}()
-		v, known, err := out.s.await(context.Background())
+		v, known, err := out.await(context.Background())
 		assert.Nil(t, err)
 		assert.True(t, known)
 		assert.NotNil(t, v)
@@ -46,7 +46,7 @@ func TestBasicOutputs(t *testing.T) {
 		go func() {
 			reject(errors.New("boom"))
 		}()
-		v, _, err := out.s.await(context.Background())
+		v, _, err := out.await(context.Background())
 		assert.NotNil(t, err)
 		assert.Nil(t, v)
 	}
@@ -156,7 +156,7 @@ func TestResolveOutputToOutput(t *testing.T) {
 			resolve(other)
 			go func() { rejectOther(errors.New("boom")) }()
 		}()
-		v, _, err := out.s.await(context.Background())
+		v, _, err := out.await(context.Background())
 		assert.NotNil(t, err)
 		assert.Nil(t, v)
 	}
@@ -173,7 +173,7 @@ func TestOutputApply(t *testing.T) {
 			ranApp = true
 			return v + 1, nil
 		})
-		v, known, err := app.s.await(context.Background())
+		v, known, err := app.await(context.Background())
 		assert.True(t, ranApp)
 		assert.Nil(t, err)
 		assert.True(t, known)
@@ -182,14 +182,14 @@ func TestOutputApply(t *testing.T) {
 	// Test that resolved, but unknown outputs, skip the running of applies.
 	{
 		out := newOutput()
-		go func() { out.s.fulfill(42, false, nil) }()
+		go func() { out.fulfill(42, false, nil) }()
 		var ranApp bool
 		b := IntOutput(out)
 		app := b.Apply(func(v int) (interface{}, error) {
 			ranApp = true
 			return v + 1, nil
 		})
-		_, known, err := app.s.await(context.Background())
+		_, known, err := app.await(context.Background())
 		assert.False(t, ranApp)
 		assert.Nil(t, err)
 		assert.False(t, known)
@@ -204,7 +204,7 @@ func TestOutputApply(t *testing.T) {
 			ranApp = true
 			return v + 1, nil
 		})
-		v, _, err := app.s.await(context.Background())
+		v, _, err := app.await(context.Background())
 		assert.False(t, ranApp)
 		assert.NotNil(t, err)
 		assert.Nil(t, v)
@@ -221,7 +221,7 @@ func TestOutputApply(t *testing.T) {
 			ranApp = true
 			return other, nil
 		})
-		v, known, err := app.s.await(context.Background())
+		v, known, err := app.await(context.Background())
 		assert.True(t, ranApp)
 		assert.Nil(t, err)
 		assert.True(t, known)
@@ -233,7 +233,7 @@ func TestOutputApply(t *testing.T) {
 			ranApp = true
 			return IntOutput(other), nil
 		})
-		v, known, err = app.s.await(context.Background())
+		v, known, err = app.await(context.Background())
 		assert.True(t, ranApp)
 		assert.Nil(t, err)
 		assert.True(t, known)
@@ -251,7 +251,7 @@ func TestOutputApply(t *testing.T) {
 			ranApp = true
 			return other, nil
 		})
-		v, _, err := app.s.await(context.Background())
+		v, _, err := app.await(context.Background())
 		assert.True(t, ranApp)
 		assert.NotNil(t, err)
 		assert.Nil(t, v)
@@ -262,7 +262,7 @@ func TestOutputApply(t *testing.T) {
 			ranApp = true
 			return IntOutput(other), nil
 		})
-		v, _, err = app.s.await(context.Background())
+		v, _, err = app.await(context.Background())
 		assert.True(t, ranApp)
 		assert.NotNil(t, err)
 		assert.Nil(t, v)

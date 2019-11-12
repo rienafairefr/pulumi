@@ -24,7 +24,7 @@ type (
 // Resource represents a cloud resource managed by Pulumi.
 type Resource interface {
 	// URN is this resource's stable logical URN used to distinctly address it before, during, and after deployments.
-	URN() URNOutput
+	GetURN() URNOutput
 }
 
 // CustomResource is a cloud resource whose create, read, update, and delete (CRUD) operations are managed by performing
@@ -34,7 +34,7 @@ type CustomResource interface {
 	Resource
 	// ID is the provider-assigned unique identifier for this managed resource.  It is set during deployments,
 	// but might be missing ("") during planning phases.
-	ID() IDOutput
+	GetID() IDOutput
 }
 
 // ComponentResource is a resource that aggregates one or more other child resources into a higher level abstraction.
@@ -66,7 +66,7 @@ type ResourceOpt struct {
 	// the cloud resource with the given ID. The inputs to the resource's constructor must align with the resource's
 	// current state. Once a resource has been imported, the import property must be removed from the resource's
 	// options.
-	Import ID
+	Import IDInput
 	// CustomTimeouts is an optional configuration block used for CRUD operations
 	CustomTimeouts *CustomTimeouts
 }

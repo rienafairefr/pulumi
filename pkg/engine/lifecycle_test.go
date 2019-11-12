@@ -4897,6 +4897,20 @@ func TestPreviewInputPropagation(t *testing.T) {
 	assert.Nil(t, res)
 }
 
+type testResource struct {
+	URN pulumi.URNOutput    `pulumi:"urn"`
+	ID  pulumi.IDOutput     `pulumi:"id"`
+	Foo pulumi.StringOutput `pulumi:"foo"`
+}
+
+func (r *testResource) GetURN() pulumi.URNOutput {
+	return r.URN
+}
+
+func (r *testResource) GetID() pulumi.IDOutput {
+	return r.ID
+}
+
 func TestSingleResourceDefaultProviderGolangLifecycle(t *testing.T) {
 	loaders := []*deploytest.ProviderLoader{
 		deploytest.NewProviderLoader("pkgA", semver.MustParse("1.0.0"), func() (plugin.Provider, error) {
@@ -4925,14 +4939,18 @@ func TestSingleResourceDefaultProviderGolangLifecycle(t *testing.T) {
 		assert.NoError(t, err)
 
 		return pulumi.RunWithContext(ctx, func(ctx *pulumi.Context) error {
-			res, err := ctx.RegisterResource("pkgA:m:typA", "resA", true, map[string]interface{}{
-				"foo": "bar",
-			})
+			var resA testResource
+			err := ctx.RegisterResource("pkgA:m:typA", "resA", map[string]pulumi.Input{
+				"foo": pulumi.String("bar"),
+			}, &resA)
 			assert.NoError(t, err)
 
-			_, err = ctx.RegisterResource("pkgA:m:typA", "resB", true, map[string]interface{}{
-				"baz": res.State["foo"],
-			})
+			var resB testResource
+			err = ctx.RegisterResource("pkgA:m:typA", "resB", map[string]pulumi.Input{
+				"baz": pulumi.StringOutput(resA.Foo.Apply(func(v string) (interface{}, error) {
+					return v + "bar", nil
+				})),
+			}, &resB)
 			assert.NoError(t, err)
 
 			return nil

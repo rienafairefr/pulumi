@@ -66,18 +66,27 @@ func RunErr(body RunFunc) error {
 	return RunWithContext(ctx, body)
 }
 
+type stackResource struct {
+	URN URNOutput `pulumi:"urn"`
+}
+
+func (r *stackResource) GetURN() URNOutput {
+	return r.URN
+}
+
 // RunWithContext runs the body of a Pulumi program using the given Context for information about the target stack,
 // configuration, and engine connection.
 func RunWithContext(ctx *Context, body RunFunc) error {
 	info := ctx.info
 
 	// Create a root stack resource that we'll parent everything to.
-	reg, err := ctx.RegisterResource(
-		"pulumi:pulumi:Stack", fmt.Sprintf("%s-%s", info.Project, info.Stack), false, nil)
+	var stack stackResource
+	err := ctx.RegisterResource(
+		"pulumi:pulumi:Stack", fmt.Sprintf("%s-%s", info.Project, info.Stack), nil, &stack)
 	if err != nil {
 		return err
 	}
-	ctx.stackR, _, err = reg.URN().await(context.TODO())
+	ctx.stackR, _, err = stack.URN.await(context.TODO())
 	if err != nil {
 		return err
 	}

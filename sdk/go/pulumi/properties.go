@@ -21,7 +21,6 @@ import (
 	"sync"
 
 	"github.com/pkg/errors"
-	"github.com/pulumi/pulumi/sdk/go/pulumi/asset"
 )
 
 const (
@@ -30,12 +29,12 @@ const (
 	outputRejected
 )
 
-// Output helps encode the relationship between resources in a Pulumi application.  Specifically an output property
-// holds onto a value and the resource it came from.  An output value can then be provided when constructing new
+// Output helps encode the relationship between resources in a Pulumi application. Specifically an output property
+// holds onto a value and the resource it came from. An output value can then be provided when constructing new
 // resources, allowing that new resource to know both the value as well as the resource the value came from.  This
 // allows for a precise "dependency graph" to be created, which properly tracks the relationship between resources.
 type Output struct {
-	s *outputState // protect against value aliasing.
+	*outputState // protect against value aliasing.
 }
 
 // outputState is a heap-allocated block of state for each output property, in case of aliasing.
@@ -50,6 +49,10 @@ type outputState struct {
 	known bool        // true if this output's value is known.
 
 	deps []Resource // the dependencies associated with this output property.
+}
+
+func (o *outputState) isValid() bool {
+	return o != nil
 }
 
 func (o *outputState) dependencies() []Resource {
@@ -113,18 +116,17 @@ func (o *outputState) await(ctx context.Context) (interface{}, bool, error) {
 		if !ok {
 			return o.value, true, nil
 		}
-		o = ov.s
+		o = ov.outputState
 	}
 }
 
 func newOutput(deps ...Resource) Output {
 	out := Output{
-		s: &outputState{
+		&outputState{
 			deps: deps,
 		},
 	}
-	out.s.cond = sync.NewCond(&out.s.mutex)
-
+	out.outputState.cond = sync.NewCond(&out.outputState.mutex)
 	return out
 }
 
@@ -147,14 +149,16 @@ func NewOutput() (Output, func(interface{}), func(error)) {
 	out := newOutput()
 
 	resolve := func(v interface{}) {
-		out.s.resolve(v, true)
+		out.resolve(v, true)
 	}
 	reject := func(err error) {
-		out.s.reject(err)
+		out.reject(err)
 	}
 
 	return out, resolve, reject
 }
+
+func (Output) isOutput() {}
 
 // ApplyWithContext transforms the data of the output property using the applier func. The result remains an output
 // property, and accumulates all implicated dependencies, so that resources can be properly tracked using a DAG.
@@ -172,53 +176,199 @@ func (out Output) Apply(applier func(v interface{}) (interface{}, error)) Output
 func (out Output) ApplyWithContext(ctx context.Context,
 	applier func(ctx context.Context, v interface{}) (interface{}, error)) Output {
 
-	result := newOutput(out.s.deps...)
+	result := newOutput(out.dependencies()...)
 	go func() {
-		v, known, err := out.s.await(ctx)
+		v, known, err := out.await(ctx)
 		if err != nil || !known {
-			result.s.fulfill(nil, known, err)
+			result.fulfill(nil, known, err)
 			return
 		}
 
 		// If we have a known value, run the applier to transform it.
 		u, err := applier(ctx, v)
 		if err != nil {
-			result.s.reject(err)
+			result.reject(err)
 			return
 		}
 
 		// Fulfill the result.
-		result.s.fulfill(u, true, nil)
+		result.fulfill(u, true, nil)
 	}()
 	return result
 }
 
-// Outputs is a map of property name to value, one for each resource output property.
-type Outputs map[string]Output
+// Input is the type of a generic input value for a Pulumi resource. This type is used in conjunction with Output
+// to provide polymorphism over strongly-typed input values.
+//
+// The intended pattern for nested Pulumi value types is to define an input interface and a plain, input, and output
+// variant of the value type that implement the input interface.
+//
+// For example, given a nested Pulumi value type with the following shape:
+//
+//     type Nested struct {
+//         Foo int
+//         Bar string
+//     }
+//
+// We would define the following:
+//
+//     var nestedType = reflect.TypeOf((*Nested)(nil))
+//
+//     type NestedInputType interface {
+//         pulumi.Input
+//
+//         isNested()
+//     }
+//
+//     type Nested struct {
+//         Foo int `pulumi:"foo"`
+//         Bar string `pulumi:"bar"`
+//     }
+//
+//     func (*Nested) ElementType() reflect.Type {
+//         return nestedType
+//     }
+//
+//     func (*Nested) isNested() {}
+//
+//     type NestedInput struct {
+//         Foo pulumi.IntInput `pulumi:"foo"`
+//         Bar pulumi.StringInput `pulumi:"bar"`
+//     }
+//
+//     func (*NestedInput) ElementType() reflect.Type {
+//         return nestedType
+//     }
+//
+//     func (*NestedInput) isNested() {}
+//
+//     type NestedOutput pulumi.Output
+//
+//     func (NestedOutput) ElementType() reflect.Type {
+//         return nestedType
+//     }
+//
+//     func (NestedOutput) isNested() {}
+//
+//     func (out NestedOutput) Apply(applier func(*Nested) (interface{}, error)) {
+//         return out.ApplyWithContext(context.Background(), func(_ context.Context, v *Nested) (interface{}, error) {
+//             return applier(v)
+//         })
+//     }
+//
+//     func (out NestedOutput) ApplyWithContext(ctx context.Context, applier func(context.Context, *Nested) (interface{}, error) {
+//         return pulumi.Output(out).ApplyWithContext(ctx, func(ctx context.Context, v interface{}) (interface{}, error) {
+//             return applier(ctx, v.(*Nested))
+//         })
+//     }
+//
+type Input interface {
+	ElementType() reflect.Type
+}
 
-// ArchiveOutput is an Output that is typed to return archive values.
-type ArchiveOutput Output
+var anyType = reflect.TypeOf((*interface{})(nil)).Elem()
 
-var archiveType = reflect.TypeOf((*asset.Archive)(nil)).Elem()
+type AnyInput interface {
+	Input
 
-// Apply applies a transformation to the archive value when it is available.
-func (out ArchiveOutput) Apply(applier func(asset.Archive) (interface{}, error)) Output {
-	return out.ApplyWithContext(context.Background(), func(_ context.Context, v asset.Archive) (interface{}, error) {
+	isAny()
+}
+
+type anyInput struct {
+	v interface{}
+}
+
+func Any(v interface{}) AnyInput {
+	return anyInput{v: v}
+}
+
+func (anyInput) ElementType() reflect.Type {
+	return anyType
+}
+
+func (anyInput) isAny() {}
+
+type AnyOutput Output
+
+func (AnyOutput) ElementType() reflect.Type {
+	return anyType
+}
+
+func (AnyOutput) isAny() {}
+
+// Apply applies a transformation to the any value when it is available.
+func (out AnyOutput) Apply(applier func(interface{}) (interface{}, error)) Output {
+	return out.ApplyWithContext(context.Background(), func(_ context.Context, v interface{}) (interface{}, error) {
 		return applier(v)
 	})
 }
 
 // ApplyWithContext applies a transformation to the archive value when it is available.
-func (out ArchiveOutput) ApplyWithContext(ctx context.Context, applier func(context.Context, asset.Archive) (interface{}, error)) Output {
-	return Output(out).ApplyWithContext(ctx, func(ctx context.Context, v interface{}) (interface{}, error) {
-		return applier(ctx, convert(v, archiveType).(asset.Archive))
+func (out AnyOutput) ApplyWithContext(ctx context.Context, applier func(context.Context, interface{}) (interface{}, error)) Output {
+	return Output(out).ApplyWithContext(ctx, applier)
+}
+
+var archiveType = reflect.TypeOf((*archive)(nil))
+
+type ArchiveInput interface {
+	Input
+
+	isArchive()
+}
+
+func (*archive) ElementType() reflect.Type {
+	return archiveType
+}
+
+func (*archive) isArchive() {}
+
+// ArchiveOutput is an Output that is typed to return archive values.
+type ArchiveOutput Output
+
+func (ArchiveOutput) ElementType() reflect.Type {
+	return archiveType
+}
+
+func (ArchiveOutput) isArchive() {}
+
+// Apply applies a transformation to the archive value when it is available.
+func (out ArchiveOutput) Apply(applier func(Archive) (interface{}, error)) Output {
+	return out.ApplyWithContext(context.Background(), func(_ context.Context, v Archive) (interface{}, error) {
+		return applier(v)
 	})
 }
+
+// ApplyWithContext applies a transformation to the archive value when it is available.
+func (out ArchiveOutput) ApplyWithContext(ctx context.Context, applier func(context.Context, Archive) (interface{}, error)) Output {
+	return Output(out).ApplyWithContext(ctx, func(ctx context.Context, v interface{}) (interface{}, error) {
+		return applier(ctx, convert(v, archiveType).(Archive))
+	})
+}
+
+var arrayType = reflect.TypeOf((*[]interface{})(nil)).Elem()
+
+type ArrayInput interface {
+	Input
+
+	isArray()
+}
+
+type Array []interface{}
+
+func (Array) ElementType() reflect.Type {
+	return arrayType
+}
+
+func (Array) isArray() {}
 
 // ArrayOutput is an Output that is typed to return arrays of values.
 type ArrayOutput Output
 
-var arrayType = reflect.TypeOf((*[]interface{})(nil)).Elem()
+func (ArrayOutput) ElementType() reflect.Type {
+	return arrayType
+}
+
+func (ArrayOutput) isArray() {}
 
 // Apply applies a transformation to the archive value when it is available.
 func (out ArrayOutput) Apply(applier func([]interface{}) (interface{}, error)) Output {
@@ -234,29 +384,67 @@ func (out ArrayOutput) ApplyWithContext(ctx context.Context, applier func(contex
 	})
 }
 
+var assetType = reflect.TypeOf((*asset)(nil))
+
+type AssetInput interface {
+	Input
+
+	isAsset()
+}
+
+func (*asset) ElementType() reflect.Type {
+	return assetType
+}
+
+func (*asset) isAsset() {}
+
 // AssetOutput is an Output that is typed to return asset values.
 type AssetOutput Output
 
-var assetType = reflect.TypeOf((*asset.Asset)(nil)).Elem()
+func (AssetOutput) ElementType() reflect.Type {
+	return assetType
+}
+
+func (AssetOutput) isAsset() {}
 
 // Apply applies a transformation to the archive value when it is available.
-func (out AssetOutput) Apply(applier func(asset.Asset) (interface{}, error)) Output {
-	return out.ApplyWithContext(context.Background(), func(_ context.Context, v asset.Asset) (interface{}, error) {
+func (out AssetOutput) Apply(applier func(Asset) (interface{}, error)) Output {
+	return out.ApplyWithContext(context.Background(), func(_ context.Context, v Asset) (interface{}, error) {
 		return applier(v)
 	})
 }
 
 // ApplyWithContext applies a transformation to the archive value when it is available.
-func (out AssetOutput) ApplyWithContext(ctx context.Context, applier func(context.Context, asset.Asset) (interface{}, error)) Output {
+func (out AssetOutput) ApplyWithContext(ctx context.Context, applier func(context.Context, Asset) (interface{}, error)) Output {
 	return Output(out).ApplyWithContext(ctx, func(ctx context.Context, v interface{}) (interface{}, error) {
-		return applier(ctx, convert(v, assetType).(asset.Asset))
+		return applier(ctx, convert(v, assetType).(Asset))
 	})
 }
+
+var boolType = reflect.TypeOf(false)
+
+type BoolInput interface {
+	Input
+
+	isBool()
+}
+
+type Bool bool
+
+func (Bool) ElementType() reflect.Type {
+	return boolType
+}
+
+func (Bool) isBool() {}
 
 // BoolOutput is an Output that is typed to return bool values.
 type BoolOutput Output
 
-var boolType = reflect.TypeOf(false)
+func (BoolOutput) ElementType() reflect.Type {
+	return boolType
+}
+
+func (BoolOutput) isBool() {}
 
 // Apply applies a transformation to the archive value when it is available.
 func (out BoolOutput) Apply(applier func(bool) (interface{}, error)) Output {
@@ -272,10 +460,30 @@ func (out BoolOutput) ApplyWithContext(ctx context.Context, applier func(context
 	})
 }
 
+var float32Type = reflect.TypeOf(float32(0))
+
+type Float32Input interface {
+	Input
+
+	isFloat32()
+}
+
+type Float32 float32
+
+func (Float32) ElementType() reflect.Type {
+	return float32Type
+}
+
+func (Float32) isFloat32() {}
+
 // Float32Output is an Output that is typed to return float32 values.
 type Float32Output Output
 
-var float32Type = reflect.TypeOf(float32(0))
+func (Float32Output) ElementType() reflect.Type {
+	return float32Type
+}
+
+func (Float32Output) isFloat32() {}
 
 // Apply applies a transformation to the archive value when it is available.
 func (out Float32Output) Apply(applier func(float32) (interface{}, error)) Output {
@@ -291,10 +499,30 @@ func (out Float32Output) ApplyWithContext(ctx context.Context, applier func(cont
 	})
 }
 
+var float64Type = reflect.TypeOf(float64(0))
+
+type Float64Input interface {
+	Input
+
+	isFloat64()
+}
+
+type Float64 float64
+
+func (Float64) ElementType() reflect.Type {
+	return float64Type
+}
+
+func (Float64) isFloat64() {}
+
 // Float64Output is an Output that is typed to return float64 values.
 type Float64Output Output
 
-var float64Type = reflect.TypeOf(float64(0))
+func (Float64Output) ElementType() reflect.Type {
+	return float64Type
+}
+
+func (Float64Output) isFloat64() {}
 
 // Apply applies a transformation to the archive value when it is available.
 func (out Float64Output) Apply(applier func(float64) (interface{}, error)) Output {
@@ -310,13 +538,33 @@ func (out Float64Output) ApplyWithContext(ctx context.Context, applier func(cont
 	})
 }
 
+var stringType = reflect.TypeOf("")
+
+var idType = reflect.TypeOf(ID(""))
+
+type IDInput interface {
+	Input
+
+	isID()
+}
+
+func (ID) ElementType() reflect.Type {
+	return idType
+}
+
+func (ID) isID() {}
+
 // IDOutput is an Output that is typed to return ID values.
 type IDOutput Output
 
-var stringType = reflect.TypeOf("")
+func (IDOutput) ElementType() reflect.Type {
+	return idType
+}
+
+func (IDOutput) isID() {}
 
 func (out IDOutput) await(ctx context.Context) (ID, bool, error) {
-	id, known, err := out.s.await(ctx)
+	id, known, err := Output(out).await(ctx)
 	if !known || err != nil {
 		return "", known, err
 	}
@@ -337,10 +585,30 @@ func (out IDOutput) ApplyWithContext(ctx context.Context, applier func(context.C
 	})
 }
 
+var intType = reflect.TypeOf(int(0))
+
+type IntInput interface {
+	Input
+
+	isInt()
+}
+
+type Int int
+
+func (Int) ElementType() reflect.Type {
+	return intType
+}
+
+func (Int) isInt() {}
+
 // IntOutput is an Output that is typed to return int values.
 type IntOutput Output
 
-var intType = reflect.TypeOf(int(0))
+func (IntOutput) ElementType() reflect.Type {
+	return intType
+}
+
+func (IntOutput) isInt() {}
 
 // Apply applies a transformation to the archive value when it is available.
 func (out IntOutput) Apply(applier func(int) (interface{}, error)) Output {
@@ -356,10 +624,30 @@ func (out IntOutput) ApplyWithContext(ctx context.Context, applier func(context.
 	})
 }
 
+var int8Type = reflect.TypeOf(int8(0))
+
+type Int8Input interface {
+	Input
+
+	isInt8()
+}
+
+type Int8 int
+
+func (Int8) ElementType() reflect.Type {
+	return int8Type
+}
+
+func (Int8) isInt8() {}
+
 // Int8Output is an Output that is typed to return int8 values.
 type Int8Output Output
 
-var int8Type = reflect.TypeOf(int8(0))
+func (Int8Output) ElementType() reflect.Type {
+	return int8Type
+}
+
+func (Int8Output) isInt8() {}
 
 // Apply applies a transformation to the archive value when it is available.
 func (out Int8Output) Apply(applier func(int8) (interface{}, error)) Output {
@@ -375,10 +663,30 @@ func (out Int8Output) ApplyWithContext(ctx context.Context, applier func(context
 	})
 }
 
+var int16Type = reflect.TypeOf(int16(0))
+
+type Int16Input interface {
+	Input
+
+	isInt16()
+}
+
+type Int16 int
+
+func (Int16) ElementType() reflect.Type {
+	return int16Type
+}
+
+func (Int16) isInt16() {}
+
 // Int16Output is an Output that is typed to return int16 values.
 type Int16Output Output
 
-var int16Type = reflect.TypeOf(int16(0))
+func (Int16Output) ElementType() reflect.Type {
+	return int16Type
+}
+
+func (Int16Output) isInt16() {}
 
 // Apply applies a transformation to the archive value when it is available.
 func (out Int16Output) Apply(applier func(int16) (interface{}, error)) Output {
@@ -394,10 +702,30 @@ func (out Int16Output) ApplyWithContext(ctx context.Context, applier func(contex
 	})
 }
 
+var int32Type = reflect.TypeOf(int32(0))
+
+type Int32Input interface {
+	Input
+
+	isInt32()
+}
+
+type Int32 int
+
+func (Int32) ElementType() reflect.Type {
+	return int32Type
+}
+
+func (Int32) isInt32() {}
+
 // Int32Output is an Output that is typed to return int32 values.
 type Int32Output Output
 
-var int32Type = reflect.TypeOf(int32(0))
+func (Int32Output) ElementType() reflect.Type {
+	return int32Type
+}
+
+func (Int32Output) isInt32() {}
 
 // Apply applies a transformation to the archive value when it is available.
 func (out Int32Output) Apply(applier func(int32) (interface{}, error)) Output {
@@ -413,10 +741,30 @@ func (out Int32Output) ApplyWithContext(ctx context.Context, applier func(contex
 	})
 }
 
+var int64Type = reflect.TypeOf(int64(0))
+
+type Int64Input interface {
+	Input
+
+	isInt64()
+}
+
+type Int64 int
+
+func (Int64) ElementType() reflect.Type {
+	return int64Type
+}
+
+func (Int64) isInt64() {}
+
 // Int64Output is an Output that is typed to return int64 values.
 type Int64Output Output
 
-var int64Type = reflect.TypeOf(int64(0))
+func (Int64Output) ElementType() reflect.Type {
+	return int64Type
+}
+
+func (Int64Output) isInt64() {}
 
 // Apply applies a transformation to the archive value when it is available.
 func (out Int64Output) Apply(applier func(int64) (interface{}, error)) Output {
@@ -432,10 +780,30 @@ func (out Int64Output) ApplyWithContext(ctx context.Context, applier func(contex
 	})
 }
 
+var mapType = reflect.TypeOf((*map[string]interface{})(nil)).Elem()
+
+type MapInput interface {
+	Input
+
+	isMap()
+}
+
+type Map map[string]interface{}
+
+func (Map) ElementType() reflect.Type {
+	return mapType
+}
+
+func (Map) isMap() {}
+
 // MapOutput is an Output that is typed to return map values.
 type MapOutput Output
 
-var mapType = reflect.TypeOf(map[string]interface{}{})
+func (MapOutput) ElementType() reflect.Type {
+	return mapType
+}
+
+func (MapOutput) isMap() {}
 
 // Apply applies a transformation to the number value when it is available.
 func (out MapOutput) Apply(applier func(map[string]interface{}) (interface{}, error)) Output {
@@ -451,8 +819,28 @@ func (out MapOutput) ApplyWithContext(ctx context.Context, applier func(context.
 	})
 }
 
+type StringInput interface {
+	Input
+
+	isString()
+}
+
+type String string
+
+func (String) ElementType() reflect.Type {
+	return stringType
+}
+
+func (String) isString() {}
+
 // StringOutput is an Output that is typed to return number values.
 type StringOutput Output
+
+func (StringOutput) ElementType() reflect.Type {
+	return stringType
+}
+
+func (StringOutput) isString() {}
 
 // Apply applies a transformation to the archive value when it is available.
 func (out StringOutput) Apply(applier func(string) (interface{}, error)) Output {
@@ -468,10 +856,30 @@ func (out StringOutput) ApplyWithContext(ctx context.Context, applier func(conte
 	})
 }
 
+var uintType = reflect.TypeOf(uint(0))
+
+type UintInput interface {
+	Input
+
+	isUint()
+}
+
+type Uint uint
+
+func (Uint) ElementType() reflect.Type {
+	return uintType
+}
+
+func (Uint) isUint() {}
+
 // UintOutput is an Output that is typed to return uint values.
 type UintOutput Output
 
-var uintType = reflect.TypeOf(uint(0))
+func (UintOutput) ElementType() reflect.Type {
+	return uintType
+}
+
+func (UintOutput) isUint() {}
 
 // Apply applies a transformation to the archive value when it is available.
 func (out UintOutput) Apply(applier func(uint) (interface{}, error)) Output {
@@ -487,10 +895,30 @@ func (out UintOutput) ApplyWithContext(ctx context.Context, applier func(context
 	})
 }
 
+var uint8Type = reflect.TypeOf(uint8(0))
+
+type Uint8Input interface {
+	Input
+
+	isUint8()
+}
+
+type Uint8 uint
+
+func (Uint8) ElementType() reflect.Type {
+	return uint8Type
+}
+
+func (Uint8) isUint8() {}
+
 // Uint8Output is an Output that is typed to return uint8 values.
 type Uint8Output Output
 
-var uint8Type = reflect.TypeOf(uint8(0))
+func (Uint8Output) ElementType() reflect.Type {
+	return uint8Type
+}
+
+func (Uint8Output) isUint8() {}
 
 // Apply applies a transformation to the archive value when it is available.
 func (out Uint8Output) Apply(applier func(uint8) (interface{}, error)) Output {
@@ -506,10 +934,30 @@ func (out Uint8Output) ApplyWithContext(ctx context.Context, applier func(contex
 	})
 }
 
+var uint16Type = reflect.TypeOf(uint16(0))
+
+type Uint16Input interface {
+	Input
+
+	isUint16()
+}
+
+type Uint16 uint
+
+func (Uint16) ElementType() reflect.Type {
+	return uint16Type
+}
+
+func (Uint16) isUint16() {}
+
 // Uint16Output is an Output that is typed to return uint16 values.
 type Uint16Output Output
 
-var uint16Type = reflect.TypeOf(uint16(0))
+func (Uint16Output) ElementType() reflect.Type {
+	return uint16Type
+}
+
+func (Uint16Output) isUint16() {}
 
 // Apply applies a transformation to the archive value when it is available.
 func (out Uint16Output) Apply(applier func(uint16) (interface{}, error)) Output {
@@ -525,10 +973,30 @@ func (out Uint16Output) ApplyWithContext(ctx context.Context, applier func(conte
 	})
 }
 
+var uint32Type = reflect.TypeOf(uint32(0))
+
+type Uint32Input interface {
+	Input
+
+	isUint32()
+}
+
+type Uint32 uint
+
+func (Uint32) ElementType() reflect.Type {
+	return uint32Type
+}
+
+func (Uint32) isUint32() {}
+
 // Uint32Output is an Output that is typed to return uint32 values.
 type Uint32Output Output
 
-var uint32Type = reflect.TypeOf(uint32(0))
+func (Uint32Output) ElementType() reflect.Type {
+	return uint32Type
+}
+
+func (Uint32Output) isUint32() {}
 
 // Apply applies a transformation to the archive value when it is available.
 func (out Uint32Output) Apply(applier func(uint32) (interface{}, error)) Output {
@@ -544,10 +1012,30 @@ func (out Uint32Output) ApplyWithContext(ctx context.Context, applier func(conte
 	})
 }
 
+var uint64Type = reflect.TypeOf(uint64(0))
+
+type Uint64Input interface {
+	Input
+
+	isUint64()
+}
+
+type Uint64 uint
+
+func (Uint64) ElementType() reflect.Type {
+	return uint64Type
+}
+
+func (Uint64) isUint64() {}
+
 // Uint64Output is an Output that is typed to return uint64 values.
 type Uint64Output Output
 
-var uint64Type = reflect.TypeOf(uint64(0))
+func (Uint64Output) ElementType() reflect.Type {
+	return uint64Type
+}
+
+func (Uint64Output) isUint64() {}
 
 // Apply applies a transformation to the archive value when it is available.
 func (out Uint64Output) Apply(applier func(uint64) (interface{}, error)) Output {
@@ -563,11 +1051,31 @@ func (out Uint64Output) ApplyWithContext(ctx context.Context, applier func(conte
 	})
 }
 
+var urnType = reflect.TypeOf(URN(""))
+
+type URNInput interface {
+	Input
+
+	isURN()
+}
+
+func (URN) ElementType() reflect.Type {
+	return urnType
+}
+
+func (URN) isURN() {}
+
 // URNOutput is an Output that is typed to return URN values.
 type URNOutput Output
 
+func (URNOutput) ElementType() reflect.Type {
+	return urnType
+}
+
+func (URNOutput) isURN() {}
+
 func (out URNOutput) await(ctx context.Context) (URN, bool, error) {
-	urn, known, err := out.s.await(ctx)
+	urn, known, err := Output(out).await(ctx)
 	if !known || err != nil {
 		return "", known, err
 	}

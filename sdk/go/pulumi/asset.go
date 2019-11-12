@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package asset
+package pulumi
 
 import (
 	"reflect"
@@ -23,12 +23,16 @@ import (
 // Asset represents a file that is managed in conjunction with Pulumi resources.  An Asset may be backed by a number
 // of sources, including local filesystem paths, in-memory blobs of text, or remote files referenced by a URL.
 type Asset interface {
+	Input
+
 	// Path returns the filesystem path, for file-based assets.
 	Path() string
 	// Text returns an in-memory blob of text, for string-based assets.
 	Text() string
 	// URI returns a URI, for remote network-based assets.
 	URI() string
+
+	isResolvedAsset()
 }
 
 type asset struct {
@@ -61,14 +65,20 @@ func (a *asset) Text() string { return a.text }
 // URI returns the asset's URL, if this is a remote asset, or an empty string otherwise.
 func (a *asset) URI() string { return a.uri }
 
+func (a *asset) isResolvedAsset() {}
+
 // Archive represents a collection of Assets.
 type Archive interface {
+	Input
+
 	// Assets returns a map of named assets or archives, for collections.
 	Assets() map[string]interface{}
 	// Path returns the filesystem path, for file-based archives.
 	Path() string
 	// URI returns a URI, for remote network-based archives.
 	URI() string
+
+	isResolvedArchive()
 }
 
 type archive struct {
@@ -108,3 +118,5 @@ func (a *archive) Path() string { return a.path }
 
 // URI returns the archive's URL, if this is a remote archive, or an empty string otherwise.
 func (a *archive) URI() string { return a.uri }
+
+func (a *archive) isResolvedArchive() {}
