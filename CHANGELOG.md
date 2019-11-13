@@ -14,7 +14,7 @@ CHANGELOG
   calculated by the provider.
   [#3327](https://github.com/pulumi/pulumi/pull/3327)
 
-- Codepaths which have a high likelihood of causing a hang will print a message to the console
+- Codepaths which could result in a hang will print a message to the console
   indicating the problem, along with a link to documentation on how to restructure code to best
   address it.
 
