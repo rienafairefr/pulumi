@@ -63,13 +63,7 @@ func marshalInputs(props map[string]Input) (resource.PropertyMap, map[string][]U
 
 // `gosec` thinks these are credentials, but they are not.
 // nolint: gosec
-const (
-	rpcTokenSpecialSigKey     = "4dabf18193072939515e22adb298388d"
-	rpcTokenSpecialAssetSig   = "c44067f5952c0a294b673a41bacd8c17"
-	rpcTokenSpecialArchiveSig = "0def7320c3a5731c473e5ecbe6d01bc7"
-	rpcTokenSpecialSecretSig  = "1b47061264138c4ac30d75fd1eb44270"
-	rpcTokenUnknownValue      = "04da6b54-80e4-46f7-96ec-b56ff0331ba9"
-)
+const rpcTokenUnknownValue = "04da6b54-80e4-46f7-96ec-b56ff0331ba9"
 
 // marshalInput marshals an input value, returning its raw serializable value along with any dependencies.
 func marshalInput(v interface{}) (resource.PropertyValue, []Resource, error) {

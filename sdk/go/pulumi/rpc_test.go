@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// nolint: unused,deadcode
 package pulumi
 
 import (
@@ -212,6 +213,7 @@ func TestResourceState(t *testing.T) {
 	s, err := plugin.MarshalProperties(
 		resolved,
 		plugin.MarshalOptions{KeepUnknowns: true})
+	assert.NoError(t, err)
 	state.resolve(false, nil, nil, "foo", "bar", s)
 
 	input := map[string]Input{

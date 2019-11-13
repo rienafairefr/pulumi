@@ -51,10 +51,6 @@ type outputState struct {
 	deps []Resource // the dependencies associated with this output property.
 }
 
-func (o *outputState) isValid() bool {
-	return o != nil
-}
-
 func (o *outputState) dependencies() []Resource {
 	if o == nil {
 		return nil
@@ -157,8 +153,6 @@ func NewOutput() (Output, func(interface{}), func(error)) {
 
 	return out, resolve, reject
 }
-
-func (Output) isOutput() {}
 
 // ApplyWithContext transforms the data of the output property using the applier func. The result remains an output
 // property, and accumulates all implicated dependencies, so that resources can be properly tracked using a DAG.
@@ -271,6 +265,7 @@ var anyType = reflect.TypeOf((*interface{})(nil)).Elem()
 type AnyInput interface {
 	Input
 
+	// nolint: unused
 	isAny()
 }
 
@@ -313,6 +308,7 @@ var archiveType = reflect.TypeOf((*archive)(nil))
 type ArchiveInput interface {
 	Input
 
+	// nolint: unused
 	isArchive()
 }
 
@@ -350,6 +346,7 @@ var arrayType = reflect.TypeOf((*[]interface{})(nil)).Elem()
 type ArrayInput interface {
 	Input
 
+	// nolint: unused
 	isArray()
 }
 
@@ -389,6 +386,7 @@ var assetType = reflect.TypeOf((*asset)(nil))
 type AssetInput interface {
 	Input
 
+	// nolint: unused
 	isAsset()
 }
 
@@ -426,6 +424,7 @@ var boolType = reflect.TypeOf(false)
 type BoolInput interface {
 	Input
 
+	// nolint: unused
 	isBool()
 }
 
@@ -465,6 +464,7 @@ var float32Type = reflect.TypeOf(float32(0))
 type Float32Input interface {
 	Input
 
+	// nolint: unused
 	isFloat32()
 }
 
@@ -504,6 +504,7 @@ var float64Type = reflect.TypeOf(float64(0))
 type Float64Input interface {
 	Input
 
+	// nolint: unused
 	isFloat64()
 }
 
@@ -545,6 +546,7 @@ var idType = reflect.TypeOf(ID(""))
 type IDInput interface {
 	Input
 
+	// nolint: unused
 	isID()
 }
 
@@ -590,6 +592,7 @@ var intType = reflect.TypeOf(int(0))
 type IntInput interface {
 	Input
 
+	// nolint: unused
 	isInt()
 }
 
@@ -629,6 +632,7 @@ var int8Type = reflect.TypeOf(int8(0))
 type Int8Input interface {
 	Input
 
+	// nolint: unused
 	isInt8()
 }
 
@@ -668,6 +672,7 @@ var int16Type = reflect.TypeOf(int16(0))
 type Int16Input interface {
 	Input
 
+	// nolint: unused
 	isInt16()
 }
 
@@ -707,6 +712,7 @@ var int32Type = reflect.TypeOf(int32(0))
 type Int32Input interface {
 	Input
 
+	// nolint: unused
 	isInt32()
 }
 
@@ -746,6 +752,7 @@ var int64Type = reflect.TypeOf(int64(0))
 type Int64Input interface {
 	Input
 
+	// nolint: unused
 	isInt64()
 }
 
@@ -785,6 +792,7 @@ var mapType = reflect.TypeOf((*map[string]interface{})(nil)).Elem()
 type MapInput interface {
 	Input
 
+	// nolint: unused
 	isMap()
 }
 
@@ -822,6 +830,7 @@ func (out MapOutput) ApplyWithContext(ctx context.Context, applier func(context.
 type StringInput interface {
 	Input
 
+	// nolint: unused
 	isString()
 }
 
@@ -861,6 +870,7 @@ var uintType = reflect.TypeOf(uint(0))
 type UintInput interface {
 	Input
 
+	// nolint: unused
 	isUint()
 }
 
@@ -900,6 +910,7 @@ var uint8Type = reflect.TypeOf(uint8(0))
 type Uint8Input interface {
 	Input
 
+	// nolint: unused
 	isUint8()
 }
 
@@ -939,6 +950,7 @@ var uint16Type = reflect.TypeOf(uint16(0))
 type Uint16Input interface {
 	Input
 
+	// nolint: unused
 	isUint16()
 }
 
@@ -978,6 +990,7 @@ var uint32Type = reflect.TypeOf(uint32(0))
 type Uint32Input interface {
 	Input
 
+	// nolint: unused
 	isUint32()
 }
 
@@ -1017,6 +1030,7 @@ var uint64Type = reflect.TypeOf(uint64(0))
 type Uint64Input interface {
 	Input
 
+	// nolint: unused
 	isUint64()
 }
 
@@ -1056,6 +1070,7 @@ var urnType = reflect.TypeOf(URN(""))
 type URNInput interface {
 	Input
 
+	// nolint: unused
 	isURN()
 }
 
