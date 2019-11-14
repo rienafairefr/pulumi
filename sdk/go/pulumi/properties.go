@@ -318,6 +318,9 @@ func (*archive) ElementType() reflect.Type {
 
 func (*archive) isArchive() {}
 
+// TODO(pdg): union types
+func (*archive) isString() {}
+
 // ArchiveOutput is an Output that is typed to return archive values.
 type ArchiveOutput Output
 
@@ -395,6 +398,9 @@ func (*asset) ElementType() reflect.Type {
 }
 
 func (*asset) isAsset() {}
+
+// TODO(pdg): union types
+func (*asset) isString() {}
 
 // AssetOutput is an Output that is typed to return asset values.
 type AssetOutput Output

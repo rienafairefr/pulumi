@@ -33,6 +33,8 @@ type Asset interface {
 	URI() string
 
 	isResolvedAsset()
+	isAsset()
+	isString()
 }
 
 type asset struct {
@@ -79,6 +81,8 @@ type Archive interface {
 	URI() string
 
 	isResolvedArchive()
+	isArchive()
+	isString()
 }
 
 type archive struct {
