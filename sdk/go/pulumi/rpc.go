@@ -31,7 +31,7 @@ func marshalInputs(props map[string]Input) (resource.PropertyMap, map[string][]U
 	pmap, pdeps := resource.PropertyMap{}, map[string][]URN{}
 	for key := range props {
 		// Get the underlying value, possibly waiting for an output to arrive.
-		v, resourceDeps, err := marshalInput(props[key])
+		v, resourceDeps, err := marshalInput(props[key], true)
 		if err != nil {
 			return nil, nil, nil, errors.Wrapf(err, "awaiting input property %s", key)
 		}
@@ -65,8 +65,10 @@ func marshalInputs(props map[string]Input) (resource.PropertyMap, map[string][]U
 // nolint: gosec
 const rpcTokenUnknownValue = "04da6b54-80e4-46f7-96ec-b56ff0331ba9"
 
+const cannotAwaitFmt = "cannot marshal Output value of type %T; please use Apply to access the Output's value"
+
 // marshalInput marshals an input value, returning its raw serializable value along with any dependencies.
-func marshalInput(v interface{}) (resource.PropertyValue, []Resource, error) {
+func marshalInput(v interface{}, await bool) (resource.PropertyValue, []Resource, error) {
 	for {
 		// If v is nil, just return that.
 		if v == nil {
@@ -75,6 +77,9 @@ func marshalInput(v interface{}) (resource.PropertyValue, []Resource, error) {
 
 		// If this is an Output, recurse.
 		if out, ok := isOutput(v); ok {
+			if !await {
+				return resource.PropertyValue{}, nil, errors.Errorf(cannotAwaitFmt, v)
+			}
 			return marshalInputOutput(out)
 		}
 
@@ -91,7 +96,7 @@ func marshalInput(v interface{}) (resource.PropertyValue, []Resource, error) {
 			if as := v.Assets(); as != nil {
 				assets = make(map[string]interface{})
 				for k, a := range as {
-					aa, _, err := marshalInput(a)
+					aa, _, err := marshalInput(a, await)
 					if err != nil {
 						return resource.PropertyValue{}, nil, err
 					}
@@ -104,10 +109,10 @@ func marshalInput(v interface{}) (resource.PropertyValue, []Resource, error) {
 				URI:    v.URI(),
 			}), nil, nil
 		case anyInput:
-			return marshalInput(v.v)
+			return marshalInput(v.v, await)
 		case CustomResource:
 			// Resources aren't serializable; instead, serialize a reference to ID, tracking as a dependency.
-			e, d, err := marshalInput(v.GetID())
+			e, d, err := marshalInput(v.GetID(), await)
 			if err != nil {
 				return resource.PropertyValue{}, nil, err
 			}
@@ -138,7 +143,7 @@ func marshalInput(v interface{}) (resource.PropertyValue, []Resource, error) {
 			var deps []Resource
 			for i := 0; i < rv.Len(); i++ {
 				elem := rv.Index(i)
-				e, d, err := marshalInput(elem.Interface())
+				e, d, err := marshalInput(elem.Interface(), await)
 				if err != nil {
 					return resource.PropertyValue{}, nil, err
 				}
@@ -157,7 +162,7 @@ func marshalInput(v interface{}) (resource.PropertyValue, []Resource, error) {
 			var deps []Resource
 			for _, key := range rv.MapKeys() {
 				value := rv.MapIndex(key)
-				mv, d, err := marshalInput(value.Interface())
+				mv, d, err := marshalInput(value.Interface(), await)
 				if err != nil {
 					return resource.PropertyValue{}, nil, err
 				}
@@ -176,7 +181,7 @@ func marshalInput(v interface{}) (resource.PropertyValue, []Resource, error) {
 					continue
 				}
 
-				fv, d, err := marshalInput(rv.Field(i).Interface())
+				fv, d, err := marshalInput(rv.Field(i).Interface(), await)
 				if err != nil {
 					return resource.PropertyValue{}, nil, err
 				}
@@ -201,7 +206,7 @@ func marshalInputOutput(out Output) (resource.PropertyValue, []Resource, error) 
 
 	// If the value is known, marshal it.
 	if known {
-		e, d, merr := marshalInput(ov)
+		e, d, merr := marshalInput(ov, true)
 		if merr != nil {
 			return resource.PropertyValue{}, nil, merr
 		}
@@ -209,7 +214,7 @@ func marshalInputOutput(out Output) (resource.PropertyValue, []Resource, error) 
 	}
 
 	// Otherwise, simply return the unknown value sentinel.
-	return resource.MakeComputed(resource.PropertyValue{}), out.dependencies(), nil
+	return resource.MakeComputed(resource.NewStringProperty("")), out.dependencies(), nil
 }
 
 func unmarshalPropertyValue(v resource.PropertyValue) (interface{}, error) {

@@ -119,10 +119,17 @@ func (ctx *Context) GetConfig(key string) (string, bool) {
 	return v, ok
 }
 
-// Invoke will invoke a provider's function, identified by its token tok.  This function call is synchronous.
-func (ctx *Context) Invoke(tok string, args map[string]Input, opts ...InvokeOpt) (map[string]interface{}, error) {
+// Invoke will invoke a provider's function, identified by its token tok. This function call is synchronous.
+//
+// args and result must be pointers to struct values fields are appropriately tagged and typed for use with Pulumi.
+func (ctx *Context) Invoke(tok string, args interface{}, result interface{}, opts ...InvokeOpt) error {
 	if tok == "" {
-		return nil, errors.New("invoke token must not be empty")
+		return errors.New("invoke token must not be empty")
+	}
+
+	resultV := reflect.ValueOf(result)
+	if resultV.Kind() != reflect.Ptr || resultV.Elem().Kind() != reflect.Struct {
+		return errors.New("result must be a pointer to a struct value")
 	}
 
 	// Check for a provider option.
@@ -131,35 +138,42 @@ func (ctx *Context) Invoke(tok string, args map[string]Input, opts ...InvokeOpt)
 		if opt.Provider != nil {
 			pr, err := ctx.resolveProviderReference(opt.Provider)
 			if err != nil {
-				return nil, err
+				return err
 			}
 			provider = pr
 			break
 		}
 	}
 
-	// Serialize arguments, first by awaiting them, and then marshaling them to the requisite gRPC values.
-	// TODO[pulumi/pulumi#1483]: feels like we should be propagating dependencies to the outputs, instead of ignoring.
-	resolvedArgs, _, _, err := marshalInputs(args)
+	// Serialize arguments. Outputs will not be awaited: instead, an error will be returned if any Outputs are present.
+	if args == nil {
+		args = struct{}{}
+	}
+	resolvedArgs, _, err := marshalInput(args, false)
 	if err != nil {
-		return nil, errors.Wrap(err, "marshaling arguments")
+		return errors.Wrap(err, "marshaling arguments")
+	}
+
+	resolvedArgsMap := resource.PropertyMap{}
+	if resolvedArgs.IsObject() {
+		resolvedArgsMap = resolvedArgs.ObjectValue()
 	}
 
 	rpcArgs, err := plugin.MarshalProperties(
-		resolvedArgs,
+		resolvedArgsMap,
 		plugin.MarshalOptions{KeepUnknowns: false})
 	if err != nil {
-		return nil, errors.Wrap(err, "marshaling arguments")
+		return errors.Wrap(err, "marshaling arguments")
 	}
 
 	// Note that we're about to make an outstanding RPC request, so that we can rendezvous during shutdown.
 	if err = ctx.beginRPC(); err != nil {
-		return nil, err
+		return err
 	}
 	defer ctx.endRPC()
 
 	// Now, invoke the RPC to the provider synchronously.
-	logging.V(9).Infof("Invoke(%s, #args=%d): RPC call being made synchronously", tok, len(args))
+	logging.V(9).Infof("Invoke(%s, #args=%d): RPC call being made synchronously", tok, len(resolvedArgsMap))
 	resp, err := ctx.monitor.Invoke(ctx.ctx, &pulumirpc.InvokeRequest{
 		Tok:      tok,
 		Args:     rpcArgs,
@@ -167,7 +181,7 @@ func (ctx *Context) Invoke(tok string, args map[string]Input, opts ...InvokeOpt)
 	})
 	if err != nil {
 		logging.V(9).Infof("Invoke(%s, ...): error: %v", tok, err)
-		return nil, err
+		return err
 	}
 
 	// If there were any failures from the provider, return them.
@@ -178,21 +192,20 @@ func (ctx *Context) Invoke(tok string, args map[string]Input, opts ...InvokeOpt)
 			ferr = multierror.Append(ferr,
 				errors.Errorf("%s invoke failed: %s (%s)", tok, failure.Reason, failure.Property))
 		}
-		return nil, ferr
+		return ferr
 	}
 
 	// Otherwsie, simply unmarshal the output properties and return the result.
 	outProps, err := plugin.UnmarshalProperties(resp.Return, plugin.MarshalOptions{KeepSecrets: true})
 	if err != nil {
-		return nil, err
+		return err
 	}
-	outsV, err := unmarshalPropertyValue(resource.NewObjectProperty(outProps))
-	if err != nil {
-		return nil, err
+
+	if err = unmarshalOutput(resource.NewObjectProperty(outProps), resultV.Elem()); err != nil {
+		return err
 	}
-	outs := outsV.(map[string]interface{})
-	logging.V(9).Infof("Invoke(%s, ...): success: w/ %d outs (err=%v)", tok, len(outs), err)
-	return outs, nil
+	logging.V(9).Infof("Invoke(%s, ...): success: w/ %d outs (err=%v)", tok, len(outProps), err)
+	return nil
 }
 
 // ReadResource reads an existing custom resource's state from the resource monitor. t is the fully qualified type
@@ -465,7 +478,7 @@ func (state *resourceState) resolve(dryrun bool, err error, inputs *resourceInpu
 	for k, resolver := range state.outputs {
 		// If this is an unknown or missing value during a dry run, do nothing.
 		v, ok := outprops[resource.PropertyKey(k)]
-		if !ok {
+		if !ok && !dryrun {
 			v = inprops[resource.PropertyKey(k)]
 		}
 
