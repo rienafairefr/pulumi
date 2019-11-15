@@ -298,6 +298,10 @@ func TestOutputApply(t *testing.T) {
 		go func() { resolve(42) }()
 		out := IntOutput(o)
 
+		o2, resolve2, _ := NewOutput()
+		go func() { resolve2("hello") }()
+		out2 := StringOutput(o2)
+
 		res := out.
 			Apply(func(v int) myStructType {
 				return myStructType{foo: v, bar: "qux,zed"}
@@ -309,12 +313,12 @@ func TestOutputApply(t *testing.T) {
 				}
 				return bar, nil
 			}).
-			Apply(func (v string) ([]interface{}, error) {
+			Apply(func (v string) ([]string, error) {
 				strs := strings.Split(v, ",")
 				if len(strs) != 2 {
 					return nil, errors.New("unexpected value")
 				}
-				return []interface{}{strs[0], strs[1]}, nil
+				return []string{strs[0], strs[1]}, nil
 			})
 
 		res2 := out.
@@ -328,43 +332,41 @@ func TestOutputApply(t *testing.T) {
 				}
 				return bar, nil
 			}).
-			Apply(func (v string) ([]interface{}, error) {
+			Apply(func (v string) ([]string, error) {
 				strs := strings.Split(v, ",")
 				if len(strs) != 2 {
 					return nil, errors.New("unexpected value")
 				}
-				return []interface{}{strs[0], strs[1]}, nil
+				return []string{strs[0], strs[1]}, nil
 			})
 
 		res3 := All(res, res2).Apply(func (v []interface{}) string {
-			res, res2 := v[0].([]interface{}), v[1].([]interface{})
-
-			var strs []string
-			for _, s := range res2 {
-				strs = append(strs, s.(string))
-			}
-			for _, s := range res {
-				strs = append(strs, s.(string))
-			}
-
-			return strings.Join(strs, ",")
+			res, res2 := v[0].([]string), v[1].([]string)
+			return strings.Join(append(res2, res...), ",")
 		})
 
-		_, ok := res.(AnyArrayOutput)
+		res4 := All(out, out2).Apply(func(v []interface{}) *myStructType {
+			return &myStructType{
+				foo: v[0].(int),
+				bar: v[1].(string),
+			}
+		})
+
+		_, ok := res.(StringArrayOutput)
 		assert.True(t, ok)
 
 		v, known, err := await(res)
 		assert.Nil(t, err)
 		assert.True(t, known)
-		assert.Equal(t, []interface{}{"qux", "zed"}, v)
+		assert.Equal(t, []string{"qux", "zed"}, v)
 
-		_, ok = res2.(AnyArrayOutput)
+		_, ok = res2.(StringArrayOutput)
 		assert.True(t, ok)
 
 		v, known, err = await(res2)
 		assert.Nil(t, err)
 		assert.True(t, known)
-		assert.Equal(t, []interface{}{"foo", "bar"}, v)
+		assert.Equal(t, []string{"foo", "bar"}, v)
 
 		_, ok = res3.(StringOutput)
 		assert.True(t, ok)
@@ -373,5 +375,13 @@ func TestOutputApply(t *testing.T) {
 		assert.Nil(t, err)
 		assert.True(t, known)
 		assert.Equal(t, "foo,bar,qux,zed", v)
+
+		_, ok = res4.(AnyOutput)
+		assert.True(t, ok)
+
+		v, known, err = await(res4)
+		assert.Nil(t, err)
+		assert.True(t, known)
+		assert.Equal(t, &myStructType{foo: 42, bar: "hello"}, v)
 	}
 }
