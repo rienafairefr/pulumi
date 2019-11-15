@@ -20,6 +20,11 @@ import (
 	"github.com/pulumi/pulumi/pkg/util/contract"
 )
 
+// AssetOrArchive represents either an Asset or an Archive.
+type AssetOrArchive interface {
+	isAssetOrArchive()
+}
+
 // Asset represents a file that is managed in conjunction with Pulumi resources.  An Asset may be backed by a number
 // of sources, including local filesystem paths, in-memory blobs of text, or remote files referenced by a URL.
 type Asset interface {
@@ -34,7 +39,7 @@ type Asset interface {
 
 	isResolvedAsset()
 	isAsset()
-	isString()
+	isAssetOrArchive()
 }
 
 type asset struct {
@@ -82,7 +87,7 @@ type Archive interface {
 
 	isResolvedArchive()
 	isArchive()
-	isString()
+	isAssetOrArchive()
 }
 
 type archive struct {
