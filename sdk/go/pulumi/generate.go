@@ -58,9 +58,9 @@ func (b builtin) ExportedType() string {
 
 var builtins = []builtin{
 	{Name: "Any", Type: "interface{}", inputType: "anyInput"},
-	{Name: "Archive", Type: "*archive", inputType: "*archive", Implements: []string{"AssetOrArchive"}},
+	{Name: "Archive", Type: "Archive", inputType: "*archive", Implements: []string{"AssetOrArchive"}},
 	{Name: "Array", Type: "[]interface{}"},
-	{Name: "Asset", Type: "*asset", inputType: "*asset", Implements: []string{"AssetOrArchive"}},
+	{Name: "Asset", Type: "Asset", inputType: "*asset", Implements: []string{"AssetOrArchive"}},
 	{Name: "AssetOrArchive", Type: "AssetOrArchive"},
 	{Name: "Bool", Type: "bool"},
 	{Name: "Float32", Type: "float32"},

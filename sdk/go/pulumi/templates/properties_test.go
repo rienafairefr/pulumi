@@ -281,73 +281,10 @@ func TestOutputApply(t *testing.T) {
 		out := IntOutput(o)
 
 		var ok bool
-
-		_, ok = out.Apply(func(v int) interface{} { return *new(interface{}) }).(AnyOutput)
+{{range .Builtins}}
+		_, ok = out.Apply(func(v int) {{.ExportedType}} { return *new({{.ExportedType}}) }).({{.Name}}Output)
 		assert.True(t, ok)
-
-		_, ok = out.Apply(func(v int) Archive { return *new(Archive) }).(ArchiveOutput)
-		assert.True(t, ok)
-
-		_, ok = out.Apply(func(v int) []interface{} { return *new([]interface{}) }).(ArrayOutput)
-		assert.True(t, ok)
-
-		_, ok = out.Apply(func(v int) Asset { return *new(Asset) }).(AssetOutput)
-		assert.True(t, ok)
-
-		_, ok = out.Apply(func(v int) AssetOrArchive { return *new(AssetOrArchive) }).(AssetOrArchiveOutput)
-		assert.True(t, ok)
-
-		_, ok = out.Apply(func(v int) bool { return *new(bool) }).(BoolOutput)
-		assert.True(t, ok)
-
-		_, ok = out.Apply(func(v int) float32 { return *new(float32) }).(Float32Output)
-		assert.True(t, ok)
-
-		_, ok = out.Apply(func(v int) float64 { return *new(float64) }).(Float64Output)
-		assert.True(t, ok)
-
-		_, ok = out.Apply(func(v int) ID { return *new(ID) }).(IDOutput)
-		assert.True(t, ok)
-
-		_, ok = out.Apply(func(v int) int { return *new(int) }).(IntOutput)
-		assert.True(t, ok)
-
-		_, ok = out.Apply(func(v int) int16 { return *new(int16) }).(Int16Output)
-		assert.True(t, ok)
-
-		_, ok = out.Apply(func(v int) int32 { return *new(int32) }).(Int32Output)
-		assert.True(t, ok)
-
-		_, ok = out.Apply(func(v int) int64 { return *new(int64) }).(Int64Output)
-		assert.True(t, ok)
-
-		_, ok = out.Apply(func(v int) int8 { return *new(int8) }).(Int8Output)
-		assert.True(t, ok)
-
-		_, ok = out.Apply(func(v int) map[string]interface{} { return *new(map[string]interface{}) }).(MapOutput)
-		assert.True(t, ok)
-
-		_, ok = out.Apply(func(v int) string { return *new(string) }).(StringOutput)
-		assert.True(t, ok)
-
-		_, ok = out.Apply(func(v int) URN { return *new(URN) }).(URNOutput)
-		assert.True(t, ok)
-
-		_, ok = out.Apply(func(v int) uint { return *new(uint) }).(UintOutput)
-		assert.True(t, ok)
-
-		_, ok = out.Apply(func(v int) uint16 { return *new(uint16) }).(Uint16Output)
-		assert.True(t, ok)
-
-		_, ok = out.Apply(func(v int) uint32 { return *new(uint32) }).(Uint32Output)
-		assert.True(t, ok)
-
-		_, ok = out.Apply(func(v int) uint64 { return *new(uint64) }).(Uint64Output)
-		assert.True(t, ok)
-
-		_, ok = out.Apply(func(v int) uint8 { return *new(uint8) }).(Uint8Output)
-		assert.True(t, ok)
-
+{{end}}
 	}
 	// Test some chained applies.
 	{
@@ -371,7 +308,7 @@ func TestOutputApply(t *testing.T) {
 				}
 				return bar, nil
 			}).
-			Apply(func(v string) ([]interface{}, error) {
+			Apply(func (v string) ([]interface{}, error) {
 				strs := strings.Split(v, ",")
 				if len(strs) != 2 {
 					return nil, errors.New("unexpected value")

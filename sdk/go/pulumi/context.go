@@ -400,7 +400,7 @@ func (ctx *Context) RegisterResource(
 }
 
 type resolver struct {
-	output   Output
+	output   OutputType
 	elemType reflect.Type
 }
 
@@ -437,7 +437,7 @@ func makeResourceState(resourceV Resource) *resourceState {
 		typedOutput := reflect.ValueOf(output).Convert(fieldV.Type())
 
 		elemType := anyType
-		if typed, ok := typedOutput.Interface().(Input); ok {
+		if typed, ok := typedOutput.Interface().(Output); ok {
 			elemType = typed.ElementType()
 		}
 

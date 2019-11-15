@@ -23,6 +23,30 @@ import (
 	"github.com/pkg/errors"
 )
 
+type Output interface {
+	ElementType() reflect.Type
+
+	Apply(applier interface{}) Output
+	ApplyWithContext(ctx context.Context, applier interface{}) Output
+}
+
+var concreteTypeToOutputType sync.Map // map[reflect.Type]reflect.Type
+
+// RegisterOutputType registers an Output type with the Pulumi runtime. If a value of this type's concrete type is
+// returned by an Apply, the Apply will return the specific Output type.
+func RegisterOutputType(output Output) {
+	refv := reflect.ValueOf(output)
+	if !outputType.ConvertibleTo(refv.Type()) {
+		panic(errors.Errorf("cannot convert from %v to %T", outputType, output))
+	}
+
+	elementType := output.ElementType()
+	existing, hasExisting := concreteTypeToOutputType.LoadOrStore(elementType, refv.Type())
+	if hasExisting {
+		panic(errors.Errorf("an output type for %v is already registered: %v", elementType, existing))
+	}
+}
+
 const (
 	outputPending = iota
 	outputResolved
@@ -33,7 +57,7 @@ const (
 // holds onto a value and the resource it came from. An output value can then be provided when constructing new
 // resources, allowing that new resource to know both the value as well as the resource the value came from.  This
 // allows for a precise "dependency graph" to be created, which properly tracks the relationship between resources.
-type Output struct {
+type OutputType struct {
 	*outputState // protect against value aliasing.
 }
 
@@ -116,8 +140,8 @@ func (o *outputState) await(ctx context.Context) (interface{}, bool, error) {
 	}
 }
 
-func newOutput(deps ...Resource) Output {
-	out := Output{
+func newOutput(deps ...Resource) OutputType {
+	out := OutputType{
 		&outputState{
 			deps: deps,
 		},
@@ -126,22 +150,22 @@ func newOutput(deps ...Resource) Output {
 	return out
 }
 
-var outputType = reflect.TypeOf(Output{})
+var outputType = reflect.TypeOf((*OutputType)(nil)).Elem()
 
-func isOutput(v interface{}) (Output, bool) {
+func isOutput(v interface{}) (OutputType, bool) {
 	if v != nil {
 		rv := reflect.ValueOf(v)
 		if rv.Type().ConvertibleTo(outputType) {
-			return rv.Convert(outputType).Interface().(Output), true
+			return rv.Convert(outputType).Interface().(OutputType), true
 		}
 	}
-	return Output{}, false
+	return OutputType{}, false
 }
 
 // NewOutput returns an output value that can be used to rendezvous with the production of a value or error.  The
 // function returns the output itself, plus two functions: one for resolving a value, and another for rejecting with an
 // error; exactly one function must be called. This acts like a promise.
-func NewOutput() (Output, func(interface{}), func(error)) {
+func NewOutput() (AnyOutput, func(interface{}), func(error)) {
 	out := newOutput()
 
 	resolve := func(v interface{}) {
@@ -151,25 +175,98 @@ func NewOutput() (Output, func(interface{}), func(error)) {
 		out.reject(err)
 	}
 
-	return out, resolve, reject
+	return AnyOutput(out), resolve, reject
 }
 
-// ApplyWithContext transforms the data of the output property using the applier func. The result remains an output
+var contextType = reflect.TypeOf((*context.Context)(nil)).Elem()
+var errorType = reflect.TypeOf((*error)(nil)).Elem()
+
+func makeContextful(fn interface{}, elementType reflect.Type) interface{} {
+	fv := reflect.ValueOf(fn)
+	if fv.Kind() != reflect.Func {
+		panic(errors.New("applier must be a function"))
+	}
+
+	ft := fv.Type()
+	if ft.NumIn() != 1 || !elementType.AssignableTo(ft.In(0)) {
+		panic(errors.Errorf("applier must have 1 input parameter assignable from %v", elementType))
+	}
+
+	var outs []reflect.Type
+	switch ft.NumOut() {
+	case 1:
+		// Okay
+		outs = []reflect.Type{ft.Out(0)}
+	case 2:
+		// Second out parameter must be of type error
+		if !ft.Out(1).AssignableTo(errorType) {
+			panic(errors.New("applier's second return type must be assignable to error"))
+		}
+		outs = []reflect.Type{ft.Out(0), ft.Out(1)}
+	default:
+		panic(errors.New("appplier must return exactly one or two values"))
+	}
+
+	ins := []reflect.Type{contextType, ft.In(0)}
+	contextfulType := reflect.FuncOf(ins, outs, ft.IsVariadic())
+	contextfulFunc := reflect.MakeFunc(contextfulType, func(args []reflect.Value) []reflect.Value {
+		// Slice off the context argument and call the applier.
+		return fv.Call(args[1:])
+	})
+	return contextfulFunc.Interface()
+}
+
+func checkApplier(fn interface{}, elementType reflect.Type) reflect.Value {
+	fv := reflect.ValueOf(fn)
+	if fv.Kind() != reflect.Func {
+		panic(errors.New("applier must be a function"))
+	}
+
+	ft := fv.Type()
+	if ft.NumIn() != 2 || !contextType.AssignableTo(ft.In(0)) || !elementType.AssignableTo(ft.In(1)) {
+		panic(errors.Errorf("applier's input parameters must be assignable from %v and %v", contextType, elementType))
+	}
+
+	switch ft.NumOut() {
+	case 1:
+		// Okay
+	case 2:
+		// Second out parameter must be of type error
+		if !ft.Out(1).AssignableTo(errorType) {
+			panic(errors.New("applier's second return type must be assignable to error"))
+		}
+	default:
+		panic(errors.New("appplier must return exactly one or two values"))
+	}
+
+	// Okay
+	return fv
+}
+
+// Apply transforms the data of the output property using the applier func. The result remains an output
 // property, and accumulates all implicated dependencies, so that resources can be properly tracked using a DAG.
 // This function does not block awaiting the value; instead, it spawns a Goroutine that will await its availability.
-func (out Output) Apply(applier func(v interface{}) (interface{}, error)) Output {
-	return out.ApplyWithContext(context.Background(), func(ctx context.Context, v interface{}) (interface{}, error) {
-		return applier(v)
-	})
+// nolint: interfacer
+func Apply(output Output, applier interface{}) Output {
+	return ApplyWithContext(context.Background(), output, makeContextful(applier, output.ElementType()))
 }
+
+var anyOutputType = reflect.TypeOf((*AnyOutput)(nil)).Elem()
 
 // ApplyWithContext transforms the data of the output property using the applier func. The result remains an output
 // property, and accumulates all implicated dependencies, so that resources can be properly tracked using a DAG.
 // This function does not block awaiting the value; instead, it spawns a Goroutine that will await its availability.
 // The provided context can be used to reject the output as canceled.
-func (out Output) ApplyWithContext(ctx context.Context,
-	applier func(ctx context.Context, v interface{}) (interface{}, error)) Output {
+// nolint: interfacer
+func ApplyWithContext(ctx context.Context, output Output, applier interface{}) Output {
+	fn := checkApplier(applier, output.ElementType())
 
+	resultType := anyOutputType
+	if ot, ok := concreteTypeToOutputType.Load(fn.Type().Out(0)); ok {
+		resultType = ot.(reflect.Type)
+	}
+
+	out := reflect.ValueOf(output).Convert(outputType).Interface().(OutputType)
 	result := newOutput(out.dependencies()...)
 	go func() {
 		v, known, err := out.await(ctx)
@@ -179,32 +276,18 @@ func (out Output) ApplyWithContext(ctx context.Context,
 		}
 
 		// If we have a known value, run the applier to transform it.
-		u, err := applier(ctx, v)
-		if err != nil {
-			result.reject(err)
+		results := fn.Call([]reflect.Value{reflect.ValueOf(ctx), reflect.ValueOf(v)})
+		if len(results) == 2 && !results[1].IsNil() {
+			result.reject(results[1].Interface().(error))
 			return
 		}
 
 		// Fulfill the result.
-		result.fulfill(u, true, nil)
+		result.fulfill(results[0].Interface(), true, nil)
 	}()
-	return result 
-}
-{{range .Builtins}}
-// Apply{{.Name}} is like Apply, but returns a {{.Name}}Output.
-func (out Output) Apply{{.Name}}(applier func (interface{}) ({{.ExportedType}}, error)) {{.Name}}Output {
-	return out.Apply{{.Name}}WithContext(context.Background(), func (_ context.Context, v interface{}) ({{.ExportedType}}, error) {
-		return applier(v)
-	})
+	return reflect.ValueOf(result).Convert(resultType).Interface().(Output)
 }
 
-// Apply{{.Name}}WithContext is like ApplyWithContext, but returns a {{.Name}}Output.
-func (out Output) Apply{{.Name}}WithContext(ctx context.Context, applier func(context.Context, interface{}) ({{.ExportedType}}, error)) {{.Name}}Output {
-	return {{.Name}}Output(out.ApplyWithContext(ctx, func (ctx context.Context, v interface{}) (interface{}, error) {
-		return applier(ctx, v)
-	}))
-}
-{{end}}
 // Input is the type of a generic input value for a Pulumi resource. This type is used in conjunction with Output
 // to provide polymorphism over strongly-typed input values.
 //
@@ -312,7 +395,7 @@ func ({{$builtin.InputType}}) is{{$t}}() {}
 {{end}}
 {{end}}
 // {{.Name}}Output is an Output that returns {{.ExportedType}} values.
-type {{.Name}}Output Output
+type {{.Name}}Output OutputType
 
 // ElementType returns the element type of this Output ({{.ExportedType}}).
 func ({{.Name}}Output) ElementType() reflect.Type {
@@ -327,17 +410,13 @@ func ({{$builtin.Name}}Output) is{{$t}}() {}
 {{end}}
 {{end}}
 // Apply applies a transformation to the {{.Name | ToLower}} value when it is available.
-func (out {{.Name}}Output) Apply(applier func({{.ExportedType}}) (interface{}, error)) Output {
-	return out.ApplyWithContext(context.Background(), func(_ context.Context, v {{.ExportedType}}) (interface{}, error) {
-		return applier(v)
-	})
+func (out {{.Name}}Output) Apply(applier interface{}) Output {
+	return Apply(out, applier)
 }
 
 // ApplyWithContext applies a transformation to the {{.Name | ToLower}} value when it is available.
-func (out {{.Name}}Output) ApplyWithContext(ctx context.Context, applier func(context.Context, {{.ExportedType}}) (interface{}, error)) Output {
-	return Output(out).ApplyWithContext(ctx, func(ctx context.Context, v interface{}) (interface{}, error) {
-		return applier(ctx, {{if eq .Type "interface{}"}}v{{else}}convert(v, {{.Name | ToLower}}Type).({{.Type}}){{end}})
-	})
+func (out {{.Name}}Output) ApplyWithContext(ctx context.Context, applier interface{}) Output {
+	return ApplyWithContext(ctx, out, applier)
 }
 {{with $me := .}}
 {{range $builtins}}
@@ -350,17 +429,21 @@ func (out {{$me.Name}}Output) Apply{{.Name}}(applier func (v {{$me.ExportedType}
 
 // Apply{{.Name}}WithContext is like ApplyWithContext, but returns a {{.Name}}Output.
 func (out {{$me.Name}}Output) Apply{{.Name}}WithContext(ctx context.Context, applier func(context.Context, {{$me.ExportedType}}) ({{.ExportedType}}, error)) {{.Name}}Output {
-	return {{.Name}}Output(Output(out).ApplyWithContext(ctx, func (ctx context.Context, v interface{}) (interface{}, error) {
-		return applier(ctx, {{if eq $me.Type "interface{}"}}v{{else}}convert(v, {{$me.Name | ToLower}}Type).({{$me.Type}}){{end}})
-	}))
+	return out.ApplyWithContext(ctx, applier).({{.Name}}Output)
 }
 {{end}}
 {{end}}
 {{end}}
 {{end}}
 
+func init() {
+{{- range .Builtins}}
+	RegisterOutputType({{.Name}}Output{})
+{{- end}}
+}
+
 func (out IDOutput) await(ctx context.Context) (ID, bool, error) {
-	id, known, err := Output(out).await(ctx)
+	id, known, err := OutputType(out).await(ctx)
 	if !known || err != nil {
 		return "", known, err
 	}
@@ -368,7 +451,7 @@ func (out IDOutput) await(ctx context.Context) (ID, bool, error) {
 }
 
 func (out URNOutput) await(ctx context.Context) (URN, bool, error) {
-	id, known, err := Output(out).await(ctx)
+	id, known, err := OutputType(out).await(ctx)
 	if !known || err != nil {
 		return "", known, err
 	}
