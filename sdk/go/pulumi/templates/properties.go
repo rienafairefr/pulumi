@@ -377,7 +377,7 @@ type {{.Name}}Input interface {
 	is{{.Name}}()
 }
 {{if .DefineInputType}}
-// {{.Name}} is an input type for {{.ExportedType}} values.
+// {{.Name}} is an input type for {{.Type}} values.
 type {{.Name}} {{.Type}} 
 {{end}}
 {{if .DefineInputMethods}}
@@ -394,10 +394,10 @@ func ({{$builtin.InputType}}) is{{$t}}() {}
 {{end}}
 {{end}}
 {{end}}
-// {{.Name}}Output is an Output that returns {{.ExportedType}} values.
+// {{.Name}}Output is an Output that returns {{.Type}} values.
 type {{.Name}}Output OutputType
 
-// ElementType returns the element type of this Output ({{.ExportedType}}).
+// ElementType returns the element type of this Output ({{.Type}}).
 func ({{.Name}}Output) ElementType() reflect.Type {
 	return {{.Name | ToLower}}Type
 }
@@ -421,14 +421,14 @@ func (out {{.Name}}Output) ApplyWithContext(ctx context.Context, applier interfa
 {{with $me := .}}
 {{range $builtins}}
 // Apply{{.Name}} is like Apply, but returns a {{.Name}}Output.
-func (out {{$me.Name}}Output) Apply{{.Name}}(applier func (v {{$me.ExportedType}}) ({{.ExportedType}}, error)) {{.Name}}Output {
-	return out.Apply{{.Name}}WithContext(context.Background(), func (_ context.Context, v {{$me.ExportedType}}) ({{.ExportedType}}, error) {
+func (out {{$me.Name}}Output) Apply{{.Name}}(applier func (v {{$me.Type}}) ({{.Type}}, error)) {{.Name}}Output {
+	return out.Apply{{.Name}}WithContext(context.Background(), func (_ context.Context, v {{$me.Type}}) ({{.Type}}, error) {
 		return applier(v)
 	})
 }
 
 // Apply{{.Name}}WithContext is like ApplyWithContext, but returns a {{.Name}}Output.
-func (out {{$me.Name}}Output) Apply{{.Name}}WithContext(ctx context.Context, applier func(context.Context, {{$me.ExportedType}}) ({{.ExportedType}}, error)) {{.Name}}Output {
+func (out {{$me.Name}}Output) Apply{{.Name}}WithContext(ctx context.Context, applier func(context.Context, {{$me.Type}}) ({{.Type}}, error)) {{.Name}}Output {
 	return out.ApplyWithContext(ctx, applier).({{.Name}}Output)
 }
 {{end}}

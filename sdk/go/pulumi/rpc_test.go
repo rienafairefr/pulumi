@@ -47,8 +47,8 @@ func TestMarshalRoundtrip(t *testing.T) {
 		"dFileArchive":   NewFileArchive("foo.zip"),
 		"dRemoteArchive": NewRemoteArchive("https://pulumi.com/fake/archive.zip"),
 		"e":              StringOutput(out),
-		"fArray":         Array([]interface{}{0, 1.3, "x", false}),
-		"fMap": Map(map[string]interface{}{
+		"fArray":         AnyArray([]interface{}{0, 1.3, "x", false}),
+		"fMap": AnyMap(map[string]interface{}{
 			"x": "y",
 			"y": 999.9,
 			"z": false,
@@ -155,25 +155,25 @@ type testResource struct {
 	URN URNOutput `pulumi:"urn"`
 	ID  IDOutput  `pulumi:"id"`
 
-	Any     AnyOutput     `pulumi:"any"`
-	Archive ArchiveOutput `pulumi:"archive"`
-	Array   ArrayOutput   `pulumi:"array"`
-	Asset   AssetOutput   `pulumi:"asset"`
-	Bool    BoolOutput    `pulumi:"bool"`
-	Float32 Float32Output `pulumi:"float32"`
-	Float64 Float64Output `pulumi:"float64"`
-	Int     IntOutput     `pulumi:"int"`
-	Int8    Int8Output    `pulumi:"int8"`
-	Int16   Int16Output   `pulumi:"int16"`
-	Int32   Int32Output   `pulumi:"int32"`
-	Int64   Int64Output   `pulumi:"int64"`
-	Map     MapOutput     `pulumi:"map"`
-	String  StringOutput  `pulumi:"string"`
-	Uint    UintOutput    `pulumi:"uint"`
-	Uint8   Uint8Output   `pulumi:"uint8"`
-	Uint16  Uint16Output  `pulumi:"uint16"`
-	Uint32  Uint32Output  `pulumi:"uint32"`
-	Uint64  Uint64Output  `pulumi:"uint64"`
+	Any     AnyOutput      `pulumi:"any"`
+	Archive ArchiveOutput  `pulumi:"archive"`
+	Array   AnyArrayOutput `pulumi:"array"`
+	Asset   AssetOutput    `pulumi:"asset"`
+	Bool    BoolOutput     `pulumi:"bool"`
+	Float32 Float32Output  `pulumi:"float32"`
+	Float64 Float64Output  `pulumi:"float64"`
+	Int     IntOutput      `pulumi:"int"`
+	Int8    Int8Output     `pulumi:"int8"`
+	Int16   Int16Output    `pulumi:"int16"`
+	Int32   Int32Output    `pulumi:"int32"`
+	Int64   Int64Output    `pulumi:"int64"`
+	Map     AnyMapOutput   `pulumi:"map"`
+	String  StringOutput   `pulumi:"string"`
+	Uint    UintOutput     `pulumi:"uint"`
+	Uint8   Uint8Output    `pulumi:"uint8"`
+	Uint16  Uint16Output   `pulumi:"uint16"`
+	Uint32  Uint32Output   `pulumi:"uint32"`
+	Uint64  Uint64Output   `pulumi:"uint64"`
 
 	NestedA nestedTypeOutput `pulumi:"nestedA"`
 	NestedB nestedTypeOutput `pulumi:"nestedB"`
@@ -194,7 +194,7 @@ func TestResourceState(t *testing.T) {
 	resolved, _, _, _ := marshalInputs(map[string]Input{
 		"any":     Any("foo"),
 		"archive": NewRemoteArchive("https://pulumi.com/fake/archive.zip"),
-		"array":   Array([]interface{}{"foo"}),
+		"array":   AnyArray([]interface{}{"foo"}),
 		"asset":   NewStringAsset("put a lime in the coconut"),
 		"bool":    Bool(true),
 		"float32": Float32(42.0),
@@ -204,7 +204,7 @@ func TestResourceState(t *testing.T) {
 		"int16":   Int16(-3),
 		"int32":   Int32(-4),
 		"int64":   Int64(-5),
-		"map":     Map(map[string]interface{}{"foo": "bar"}),
+		"map":     AnyMap(map[string]interface{}{"foo": "bar"}),
 		"string":  String("qux"),
 		"uint":    Uint(1),
 		"uint8":   Uint8(2),

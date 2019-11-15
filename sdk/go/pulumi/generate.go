@@ -46,20 +46,9 @@ func (b builtin) InputType() string {
 	return b.Name
 }
 
-func (b builtin) ExportedType() string {
-	switch b.Type {
-	case "*archive":
-		return "Archive"
-	case "*asset":
-		return "Asset"
-	}
-	return b.Type
-}
-
-var builtins = []builtin{
+var builtins = makeBuiltins([]builtin{
 	{Name: "Any", Type: "interface{}", inputType: "anyInput"},
 	{Name: "Archive", Type: "Archive", inputType: "*archive", Implements: []string{"AssetOrArchive"}},
-	{Name: "Array", Type: "[]interface{}"},
 	{Name: "Asset", Type: "Asset", inputType: "*asset", Implements: []string{"AssetOrArchive"}},
 	{Name: "AssetOrArchive", Type: "AssetOrArchive"},
 	{Name: "Bool", Type: "bool"},
@@ -71,7 +60,6 @@ var builtins = []builtin{
 	{Name: "Int32", Type: "int32"},
 	{Name: "Int64", Type: "int64"},
 	{Name: "Int8", Type: "int8"},
-	{Name: "Map", Type: "map[string]interface{}"},
 	{Name: "String", Type: "string"},
 	{Name: "URN", Type: "URN", inputType: "URN", Implements: []string{"String"}},
 	{Name: "Uint", Type: "uint"},
@@ -79,12 +67,23 @@ var builtins = []builtin{
 	{Name: "Uint32", Type: "uint32"},
 	{Name: "Uint64", Type: "uint64"},
 	{Name: "Uint8", Type: "uint8"},
-}
+})
 
 var funcs = template.FuncMap{
 	"ToLower": func(s string) string {
 		return strings.ToLower(s)
 	},
+}
+
+func makeBuiltins(primitives []builtin) []builtin {
+	// Augment primitives with array and map types.
+	var builtins []builtin
+	for _, p := range primitives {
+		builtins = append(builtins, p)
+		builtins = append(builtins, builtin{Name: p.Name + "Array", Type: "[]" + p.Type})
+		builtins = append(builtins, builtin{Name: p.Name + "Map", Type: "map[string]" + p.Type})
+	}
+	return builtins
 }
 
 func main() {

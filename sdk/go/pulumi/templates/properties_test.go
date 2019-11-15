@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// nolint: lll
 package pulumi
 
 import (
@@ -65,7 +66,7 @@ func TestArrayOutputs(t *testing.T) {
 		resolve([]interface{}{nil, 0, "x"})
 	}()
 	{
-		arr := ArrayOutput(out)
+		arr := AnyArrayOutput(out)
 		assertApplied(t, arr.Apply(func(arr []interface{}) (interface{}, error) {
 			assert.NotNil(t, arr)
 			if assert.Equal(t, 3, len(arr)) {
@@ -102,7 +103,7 @@ func TestMapOutputs(t *testing.T) {
 		})
 	}()
 	{
-		b := MapOutput(out)
+		b := AnyMapOutput(out)
 		assertApplied(t, b.Apply(func(v map[string]interface{}) (interface{}, error) {
 			assert.NotNil(t, v)
 			assert.Equal(t, 1, v["x"])
@@ -282,7 +283,7 @@ func TestOutputApply(t *testing.T) {
 
 		var ok bool
 {{range .Builtins}}
-		_, ok = out.Apply(func(v int) {{.ExportedType}} { return *new({{.ExportedType}}) }).({{.Name}}Output)
+		_, ok = out.Apply(func(v int) {{.Type}} { return *new({{.Type}}) }).({{.Name}}Output)
 		assert.True(t, ok)
 {{end}}
 	}
@@ -316,7 +317,7 @@ func TestOutputApply(t *testing.T) {
 				return []interface{}{strs[0], strs[1]}, nil
 			})
 
-		_, ok := res.(ArrayOutput)
+		_, ok := res.(AnyArrayOutput)
 		assert.True(t, ok)
 
 		v, known, err := await(res)
