@@ -494,6 +494,39 @@ func TestOutputApply(t *testing.T) {
 				return []interface{}{strs[0], strs[1]}, nil
 			})
 
+		res2 := out.
+			Apply(func(v int) myStructType {
+				return myStructType{foo: v, bar: "foo,bar"}
+			}).
+			Apply(func(v interface{}) (string, error) {
+				bar := v.(myStructType).bar
+				if bar != "foo,bar" {
+					return "", errors.New("unexpected value")
+				}
+				return bar, nil
+			}).
+			Apply(func(v string) ([]interface{}, error) {
+				strs := strings.Split(v, ",")
+				if len(strs) != 2 {
+					return nil, errors.New("unexpected value")
+				}
+				return []interface{}{strs[0], strs[1]}, nil
+			})
+
+		res3 := All(res, res2).Apply(func(v []interface{}) string {
+			res, res2 := v[0].([]interface{}), v[1].([]interface{})
+
+			var strs []string
+			for _, s := range res2 {
+				strs = append(strs, s.(string))
+			}
+			for _, s := range res {
+				strs = append(strs, s.(string))
+			}
+
+			return strings.Join(strs, ",")
+		})
+
 		_, ok := res.(AnyArrayOutput)
 		assert.True(t, ok)
 
@@ -501,5 +534,21 @@ func TestOutputApply(t *testing.T) {
 		assert.Nil(t, err)
 		assert.True(t, known)
 		assert.Equal(t, []interface{}{"qux", "zed"}, v)
+
+		_, ok = res2.(AnyArrayOutput)
+		assert.True(t, ok)
+
+		v, known, err = await(res2)
+		assert.Nil(t, err)
+		assert.True(t, known)
+		assert.Equal(t, []interface{}{"foo", "bar"}, v)
+
+		_, ok = res3.(StringOutput)
+		assert.True(t, ok)
+
+		v, known, err = await(res3)
+		assert.Nil(t, err)
+		assert.True(t, known)
+		assert.Equal(t, "foo,bar,qux,zed", v)
 	}
 }

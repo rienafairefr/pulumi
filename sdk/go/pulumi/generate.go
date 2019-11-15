@@ -17,6 +17,7 @@
 package main
 
 import (
+	"io"
 	"log"
 	"os"
 	"os/exec"
@@ -105,7 +106,15 @@ func main() {
 		}
 		f.Close()
 
-		if err := exec.Command("gofmt", "-s", "-w", t.Name()).Run(); err != nil {
+		gofmt := exec.Command("gofmt", "-s", "-w", t.Name())
+		stderr, err := gofmt.StderrPipe()
+		if err != nil {
+			log.Fatalf("failed to pipe stderr from gofmt: %v", err)
+		}
+		go func() {
+			io.Copy(os.Stderr, stderr)
+		}()
+		if err := gofmt.Run(); err != nil {
 			log.Fatalf("failed to gofmt %v: %v", t.Name(), err)
 		}
 	}

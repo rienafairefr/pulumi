@@ -288,6 +288,35 @@ func ApplyWithContext(ctx context.Context, output Output, applier interface{}) O
 	return reflect.ValueOf(result).Convert(resultType).Interface().(Output)
 }
 
+func All(outputs ...Output) AnyArrayOutput {
+	return AllWithContext(context.Background(), outputs...)
+}
+
+func AllWithContext(ctx context.Context, outputs ...Output) AnyArrayOutput {
+	var deps []Resource
+	var outs []OutputType
+	for _, o := range outputs {
+		out := reflect.ValueOf(o).Convert(outputType).Interface().(OutputType)
+		deps, outs = append(deps, out.dependencies()...), append(outs, out)
+	}
+
+	result := newOutput(deps...)
+	go func() {
+		arr := make([]interface{}, len(outs))
+
+		known := true
+		for i, o := range outs {
+			ov, oKnown, err := o.await(ctx)
+			if err != nil {
+				result.reject(err)
+			}
+			arr[i], known = ov, known && oKnown
+		}
+		result.fulfill(arr, known, nil)
+	}()
+	return AnyArrayOutput(result)
+}
+
 // Input is the type of a generic input value for a Pulumi resource. This type is used in conjunction with Output
 // to provide polymorphism over strongly-typed input values.
 //
