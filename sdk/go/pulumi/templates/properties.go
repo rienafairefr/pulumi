@@ -396,7 +396,7 @@ func Any(v interface{}) AnyInput {
 
 {{with $builtins := .Builtins}}
 {{range $builtins}}
-var {{.Name | ToLower}}Type = reflect.TypeOf((*{{.Type}})(nil)).Elem()
+var {{.Name | Unexported}}Type = reflect.TypeOf((*{{.ElementType}})(nil)).Elem()
 
 // {{.Name}}Input is an input type that accepts {{.Name}} and {{.Name}}Output values.
 type {{.Name}}Input interface {
@@ -407,12 +407,12 @@ type {{.Name}}Input interface {
 }
 {{if .DefineInputType}}
 // {{.Name}} is an input type for {{.Type}} values.
-type {{.Name}} {{.Type}} 
+type {{.Name}} {{.Type}}
 {{end}}
 {{if .DefineInputMethods}}
-// ElementType returns the element type of this Input ({{.Type}}).
+// ElementType returns the element type of this Input ({{.ElementType}}).
 func ({{.InputType}}) ElementType() reflect.Type {
-	return {{.Name | ToLower}}Type
+	return {{.Name | Unexported}}Type
 }
 
 func ({{.InputType}}) is{{.Name}}() {}
@@ -426,9 +426,9 @@ func ({{$builtin.InputType}}) is{{$t}}() {}
 // {{.Name}}Output is an Output that returns {{.Type}} values.
 type {{.Name}}Output OutputType
 
-// ElementType returns the element type of this Output ({{.Type}}).
+// ElementType returns the element type of this Output ({{.ElementType}}).
 func ({{.Name}}Output) ElementType() reflect.Type {
-	return {{.Name | ToLower}}Type
+	return {{.Name | Unexported}}Type
 }
 
 func ({{.Name}}Output) is{{.Name}}() {}
@@ -438,26 +438,24 @@ func ({{.Name}}Output) is{{.Name}}() {}
 func ({{$builtin.Name}}Output) is{{$t}}() {}
 {{end}}
 {{end}}
-// Apply applies a transformation to the {{.Name | ToLower}} value when it is available.
+// Apply applies a transformation to the {{.Name | Unexported}} value when it is available.
 func (out {{.Name}}Output) Apply(applier interface{}) Output {
 	return Apply(out, applier)
 }
 
-// ApplyWithContext applies a transformation to the {{.Name | ToLower}} value when it is available.
+// ApplyWithContext applies a transformation to the {{.Name | Unexported}} value when it is available.
 func (out {{.Name}}Output) ApplyWithContext(ctx context.Context, applier interface{}) Output {
 	return ApplyWithContext(ctx, out, applier)
 }
 {{with $me := .}}
 {{range $builtins}}
 // Apply{{.Name}} is like Apply, but returns a {{.Name}}Output.
-func (out {{$me.Name}}Output) Apply{{.Name}}(applier func (v {{$me.Type}}) ({{.Type}}, error)) {{.Name}}Output {
-	return out.Apply{{.Name}}WithContext(context.Background(), func (_ context.Context, v {{$me.Type}}) ({{.Type}}, error) {
-		return applier(v)
-	})
+func (out {{$me.Name}}Output) Apply{{.Name}}(applier interface{}) {{.Name}}Output {
+	return out.Apply(applier).({{.Name}}Output)
 }
 
 // Apply{{.Name}}WithContext is like ApplyWithContext, but returns a {{.Name}}Output.
-func (out {{$me.Name}}Output) Apply{{.Name}}WithContext(ctx context.Context, applier func(context.Context, {{$me.Type}}) ({{.Type}}, error)) {{.Name}}Output {
+func (out {{$me.Name}}Output) Apply{{.Name}}WithContext(ctx context.Context, applier interface{}) {{.Name}}Output {
 	return out.ApplyWithContext(ctx, applier).({{.Name}}Output)
 }
 {{end}}

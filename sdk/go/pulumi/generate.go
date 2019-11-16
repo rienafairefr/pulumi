@@ -21,15 +21,16 @@ import (
 	"log"
 	"os"
 	"os/exec"
-	"strings"
 	"text/template"
+	"unicode"
 )
 
 type builtin struct {
-	Name       string
-	Type       string
-	inputType  string
-	Implements []string
+	Name        string
+	Type        string
+	inputType   string
+	Implements  []string
+	elementType string
 }
 
 func (b builtin) DefineInputType() bool {
@@ -38,6 +39,13 @@ func (b builtin) DefineInputType() bool {
 
 func (b builtin) DefineInputMethods() bool {
 	return b.Type != "AssetOrArchive"
+}
+
+func (b builtin) ElementType() string {
+	if b.elementType != "" {
+		return b.elementType
+	}
+	return b.Type
 }
 
 func (b builtin) InputType() string {
@@ -71,8 +79,9 @@ var builtins = makeBuiltins([]builtin{
 })
 
 var funcs = template.FuncMap{
-	"ToLower": func(s string) string {
-		return strings.ToLower(s)
+	"Unexported": func(s string) string {
+		runes := []rune(s)
+		return string(append([]rune{unicode.ToLower(runes[0])}, runes[1:]...))
 	},
 }
 
@@ -81,8 +90,8 @@ func makeBuiltins(primitives []builtin) []builtin {
 	var builtins []builtin
 	for _, p := range primitives {
 		builtins = append(builtins, p)
-		builtins = append(builtins, builtin{Name: p.Name + "Array", Type: "[]" + p.Type})
-		builtins = append(builtins, builtin{Name: p.Name + "Map", Type: "map[string]" + p.Type})
+		builtins = append(builtins, builtin{Name: p.Name + "Array", Type: "[]" + p.Name + "Input", elementType: "[]" + p.Type})
+		builtins = append(builtins, builtin{Name: p.Name + "Map", Type: "map[string]" + p.Name + "Input", elementType: "map[string]" + p.Type})
 	}
 	return builtins
 }

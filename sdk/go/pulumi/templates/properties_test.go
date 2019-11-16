@@ -283,7 +283,7 @@ func TestOutputApply(t *testing.T) {
 
 		var ok bool
 {{range .Builtins}}
-		_, ok = out.Apply(func(v int) {{.Type}} { return *new({{.Type}}) }).({{.Name}}Output)
+		_, ok = out.Apply(func(v int) {{.ElementType}} { return *new({{.ElementType}}) }).({{.Name}}Output)
 		assert.True(t, ok)
 {{end}}
 	}
