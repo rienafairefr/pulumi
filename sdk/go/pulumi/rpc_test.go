@@ -22,7 +22,6 @@ import (
 	"github.com/pulumi/pulumi/pkg/resource"
 	"github.com/pulumi/pulumi/pkg/resource/plugin"
 	"github.com/stretchr/testify/assert"
-	"golang.org/x/net/context"
 )
 
 // TestMarshalRoundtrip ensures that marshaling a complex structure to and from its on-the-wire gRPC format succeeds.
@@ -30,9 +29,8 @@ func TestMarshalRoundtrip(t *testing.T) {
 	// Create interesting inputs.
 	out, resolve, _ := NewOutput()
 	resolve("outputty")
-	out2 := newOutput()
+	out2 := newOutputState(reflect.TypeOf(""))
 	out2.fulfill(nil, false, nil)
-	out3 := OutputType{}
 	input := map[string]Input{
 		"s":            String("a string"),
 		"a":            Bool(true),
@@ -46,16 +44,16 @@ func TestMarshalRoundtrip(t *testing.T) {
 		}),
 		"dFileArchive":   NewFileArchive("foo.zip"),
 		"dRemoteArchive": NewRemoteArchive("https://pulumi.com/fake/archive.zip"),
-		"e":              StringOutput(out),
+		"e":              out,
 		"fArray":         AnyArray([]AnyInput{Any(0), Any(1.3), Any("x"), Any(false)}),
 		"fMap": AnyMap(map[string]AnyInput{
 			"x": Any("y"),
 			"y": Any(999.9),
 			"z": Any(false),
 		}),
-		"g": StringOutput(out2),
+		"g": StringOutput{out2},
 		"h": URN("foo"),
-		"i": StringOutput(out3),
+		"i": StringOutput{},
 	}
 
 	// Marshal those inputs.
@@ -133,20 +131,10 @@ func (*nestedTypeInputs) ElementType() reflect.Type {
 
 func (*nestedTypeInputs) isNestedType() {}
 
-type nestedTypeOutput OutputType
+type nestedTypeOutput struct{ *OutputState }
 
 func (nestedTypeOutput) ElementType() reflect.Type {
 	return nestedTypeType
-}
-
-// Apply applies a transformation to the any value when it is available.
-func (out nestedTypeOutput) Apply(applier interface{}) Output {
-	return Apply(out, applier)
-}
-
-// ApplyWithContext applies a transformation to the any value when it is available.
-func (out nestedTypeOutput) ApplyWithContext(ctx context.Context, applier interface{}) Output {
-	return ApplyWithContext(ctx, out, applier)
 }
 
 func (nestedTypeOutput) isNestedType() {}

@@ -86,7 +86,7 @@ func RunWithContext(ctx *Context, body RunFunc) error {
 	if err != nil {
 		return err
 	}
-	ctx.stackR, _, err = stack.URN.await(context.TODO())
+	ctx.stackR, _, err = stack.URN.awaitURN(context.TODO())
 	if err != nil {
 		return err
 	}

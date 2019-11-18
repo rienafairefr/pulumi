@@ -42,7 +42,7 @@ func marshalInputs(props map[string]Input) (resource.PropertyMap, map[string][]U
 		var deps []URN
 		pdepset := map[URN]bool{}
 		for _, dep := range resourceDeps {
-			depURN, _, err := dep.GetURN().await(context.TODO())
+			depURN, _, err := dep.GetURN().awaitURN(context.TODO())
 			if err != nil {
 				return nil, nil, nil, err
 			}
@@ -76,7 +76,7 @@ func marshalInput(v interface{}, await bool) (resource.PropertyValue, []Resource
 		}
 
 		// If this is an Output, recurse.
-		if out, ok := isOutput(v); ok {
+		if out, ok := v.(Output); ok {
 			if !await {
 				return resource.PropertyValue{}, nil, errors.Errorf(cannotAwaitFmt, v)
 			}
@@ -197,7 +197,7 @@ func marshalInput(v interface{}, await bool) (resource.PropertyValue, []Resource
 	}
 }
 
-func marshalInputOutput(out OutputType) (resource.PropertyValue, []Resource, error) {
+func marshalInputOutput(out Output) (resource.PropertyValue, []Resource, error) {
 	// Await the value and return its raw value.
 	ov, known, err := out.await(context.TODO())
 	if err != nil {
